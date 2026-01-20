@@ -1,7 +1,55 @@
+# Web Framework
 fastapi==0.110.0
 uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+
+# Task Queue & Scheduling
 celery==5.3.6
 redis==5.0.1
-pydantic==1.10.13
+
+# Database
 psycopg2-binary==2.9.9
+sqlalchemy==2.0.27
+alembic==1.13.1
+
+# Data Validation
+pydantic==1.10.13
+pydantic[email]==1.10.13
+
+# Auth & Security
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0
+pyotp==2.9.0
+
+# Document Processing
+beautifulsoup4==4.12.3
+lxml==5.1.0
+pypdf==4.0.1
+python-magic==0.4.27
+
+# Text Processing & Embeddings
+tiktoken==0.6.0
+openai==1.12.0
+
+# MinIO / S3 Storage
+minio==7.2.3
+boto3==1.34.34
+
+# HTTP Client
+httpx==0.27.0
+requests==2.31.0
+
+# Date/Time
+python-dateutil==2.8.2
+
+# Fuzzy Matching
+fuzzywuzzy==0.18.0
+python-Levenshtein==0.25.0
+
+# Testing
 pytest==8.1.1
+pytest-asyncio==0.23.5
+httptest==0.1.1
+
+# Utilities
+python-dotenv==1.0.1
