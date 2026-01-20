@@ -6,6 +6,7 @@ This repository bootstraps the open-source, low-cost stack described in `open_so
 - **FastAPI** service with health/version endpoints.
 - **Celery** worker and beat scheduler with stub tasks for ingestion and reporting jobs.
 - **Postgres**, **Redis**, and **MinIO** services wired through Docker Compose.
+- **pgvector** extension initialization for embeddings support.
 
 ## Quick start
 
@@ -21,6 +22,14 @@ Then visit:
 - `backend/app/main.py`: FastAPI app entrypoint.
 - `backend/app/tasks.py`: Celery app and scheduled task placeholders.
 - `docker-compose.yml`: local dev stack.
+- `backend/db/init.sql`: Postgres init script for pgvector.
+
+## Tests
+
+```bash
+cd backend
+pytest
+```
 
 ## Next steps
 - Implement data models and persistence.

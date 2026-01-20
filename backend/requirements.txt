@@ -4,3 +4,4 @@ celery==5.3.6
 redis==5.0.1
 pydantic==1.10.13
 psycopg2-binary==2.9.9
+pytest==8.1.1

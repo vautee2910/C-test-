@@ -30,6 +30,10 @@ celery_app.conf.beat_schedule = {
         "task": "app.tasks.generate_monthly_reports",
         "schedule": 60 * 60 * 24 * 30,
     },
+    "monthly-lookthrough": {
+        "task": "app.tasks.update_lookthrough",
+        "schedule": 60 * 60 * 24 * 30,
+    },
     "quarterly-reviews": {
         "task": "app.tasks.generate_quarterly_reviews",
         "schedule": 60 * 60 * 24 * 90,
@@ -69,6 +73,11 @@ def generate_weekly_reports() -> dict:
 @celery_app.task(name="app.tasks.generate_monthly_reports")
 def generate_monthly_reports() -> dict:
     return {"status": "queued", "task": "generate_monthly_reports"}
+
+
+@celery_app.task(name="app.tasks.update_lookthrough")
+def update_lookthrough() -> dict:
+    return {"status": "queued", "task": "update_lookthrough"}
 
 
 @celery_app.task(name="app.tasks.generate_quarterly_reviews")
