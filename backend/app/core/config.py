@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # Alert Engine
     alert_lookback_days: int = 90
 
+    # CORS & Security (P1 production hardening)
+    cors_allowed_origins: list = ["http://localhost:3000", "http://localhost:8000"]
+    trusted_hosts: list = ["localhost", "127.0.0.1"]
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
