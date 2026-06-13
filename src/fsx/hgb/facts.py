@@ -106,22 +106,41 @@ def facts_from_tables(
         for ti, table in enumerate(panels):
             section = _panel_section(table, ti, statement, len(panels))
             pending_label: Optional[str] = None
+            # A matched section header without a value of its own (e.g. bank
+            # "FORDERUNGEN AN KREDITINSTITUTE") whose group total appears on a
+            # later, label-less subtotal row.
+            pending_header: Optional[tuple] = None
             for item in table.items:
                 if not item.has_values:
                     if item.label:
                         pending_label = item.label
+                        header = matcher.match(item.label, statement=statement, section=section)
+                        if header is not None and header.confidence >= min_confidence:
+                            pending_header = (header, item.label)
                     continue
 
                 label = item.label
-                match = matcher.match(label, statement=statement, section=section)
-                if match is None and pending_label and not has_leading_enumerator(item.label):
+                match = matcher.match(label, statement=statement, section=section) if label else None
+                if match is None and pending_label and label and not has_leading_enumerator(label):
                     combined = f"{pending_label} {item.label}".strip()
                     found = matcher.match(combined, statement=statement, section=section)
                     if found is not None:
                         match, label = found, combined
+                # Orphan subtotal: a value row with no usable label inherits the
+                # pending section header (the group total it belongs to).
+                orphan = False
+                if (match is None or match.confidence < min_confidence) and not label.strip() and pending_header:
+                    match, label = pending_header[0], pending_header[1]
+                    pending_header = None
+                    orphan = True
                 pending_label = None
                 if match is None or match.confidence < min_confidence:
                     continue
+                # A labelled line item that itself resolves means the header's
+                # children are being captured individually, so any later
+                # label-less total is the grand total, not this header's group.
+                if not orphan:
+                    pending_header = None
 
                 current, prior = split_period_values(item.values)
                 periods = [(fiscal_year, current)]

@@ -173,6 +173,38 @@ def test_bilanzgewinn_not_flipped():
     assert cur.value == pytest.approx(844879.12)
 
 
+def test_orphan_subtotal_attaches_to_section_header():
+    # Bank pattern: header (no value) -> sub-items (no concept) -> total (no label).
+    matcher = ConceptMatcher.from_yaml()
+    tables = {2: [ReconstructedTable(n_columns=2, items=[
+        LineItem("Forderungen an Kreditinstitute", [None, None], y=1),
+        LineItem("a) täglich fällig", [1626.0, 5562.0], y=2),
+        LineItem("", [34329.0, 39806.0], y=3),  # label-less group total
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={2: "bilanz"},
+    )
+    fk = [f for f in facts if f.concept == "forderungen_kreditinstitute" and f.fiscal_year == 2024]
+    assert fk and fk[0].value == 34329.0
+
+
+def test_grand_total_not_misattributed_to_header():
+    # Once a header's child resolves on its own, a later label-less total (the
+    # Bilanzsumme) must NOT be attached to the header.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [ReconstructedTable(n_columns=2, items=[
+        LineItem("C. Verbindlichkeiten", [None, None], y=1),
+        LineItem("1. Verbindlichkeiten gegenüber Kreditinstituten", [167328.0, 124543.0], y=2),
+        LineItem("", [2740484.63, 2763737.11], y=3),  # Bilanzsumme, not a Verb. total
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2023, matcher=matcher,
+        statement_by_page={5: "bilanz"},
+    )
+    assert not any(f.concept == "verbindlichkeiten" for f in facts)
+
+
 def test_emit_prior_year_can_be_disabled():
     matcher = ConceptMatcher.from_yaml()
     tables = {6: [_table([LineItem("1. Umsatzerlöse", [None, 2092019.57, 2175554.06], y=1)])]}
