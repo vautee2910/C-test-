@@ -20,6 +20,10 @@ docling==2.102.1
 openai
 python-dotenv
 
+# --- Core data contracts & config (used directly by the fsx package) ---
+pydantic
+pyyaml
+
 # --- (uncomment as the pipeline grows) ---
 # pdfplumber
 # camelot-py[cv]

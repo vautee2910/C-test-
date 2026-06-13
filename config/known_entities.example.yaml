@@ -1,0 +1,49 @@
+# Project-specific known-entities dictionary for anonymisation.
+#
+# Copy to a LOCAL, gitignored file (e.g. config/known_entities.yaml) and fill in
+# the real names for the engagement. This is the most important anonymisation
+# input for German annual statements — re-identification usually runs via
+# company / subsidiary / auditor / location names, not classic PII.
+#
+# All keys are optional. See fsx/config.py for the full schema.
+
+# Aliases of the ONE main company — all map to the same token (e.g. [UNTERNEHMEN_1]).
+company_aliases:
+  - "Muster Maschinenbau GmbH"
+  - "Muster Maschinenbau"
+  - "MMG"
+
+# Each subsidiary is its own company entity (next free [UNTERNEHMEN_n]).
+subsidiaries:
+  - "Muster Tochter GmbH"
+
+# Each person is its own entity.
+people:
+  - "Max Mustermann"
+  - "Erika Musterfrau"
+
+locations:
+  - "München"
+  - "Augsburg"
+
+auditors:
+  - "Beispiel Wirtschaftsprüfung AG"
+
+tax_advisors:
+  - "Steuerkanzlei Beispiel"
+
+domains:
+  - "muster-maschinenbau.de"
+
+# Optional: override the default replacement tokens. {n} is a stable per-label
+# counter so repeated mentions of one entity collapse to the same token.
+replacement_policy:
+  company: "[UNTERNEHMEN_{n}]"
+  person: "[PERSON_{n}]"
+  location: "[ORT_{n}]"
+  auditor: "[PRUEFER_{n}]"
+
+# Optional: restrict which regex categories run. Omit to use the default set
+# (all structured German id / contact patterns except DATE).
+# regex:
+#   enabled_labels: [VAT_ID, TAX_NUMBER, COMMERCIAL_REGISTER, IBAN, EMAIL, PHONE, URL, ADDRESS]
