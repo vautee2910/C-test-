@@ -35,12 +35,14 @@ def has_leading_enumerator(label: str) -> bool:
 
 
 def normalise_label(label: str) -> str:
-    """Lowercase, strip leading enumerators, fold umlauts, drop punctuation."""
+    """Lowercase, strip enumerators and note refs, fold umlauts, drop punctuation."""
     s = label.strip().lower()
+    # Drop parenthesised note references / clarifiers, e.g. "(1)", "(Stammkapital)".
+    s = re.sub(r"\([^)]*\)", " ", s)
     # Strip possibly several stacked enumerators, e.g. "1. a) ...".
     while True:
-        new = _ENUM_RE.sub("", s)
-        if new == s:
+        new = _ENUM_RE.sub("", s).strip()
+        if new == s.strip():
             break
         s = new
     for k, v in _UMLAUTS.items():

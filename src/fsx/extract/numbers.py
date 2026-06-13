@@ -35,6 +35,36 @@ def is_de_number(token: str) -> bool:
     return ("." in token) or ("," in token)
 
 
+# A *bare* integer value: 1-3 digit groups, optional sign, NO separator-derived
+# strength of its own (e.g. "15", "28", "-770"). Used only to fill values into
+# columns already established by strong numbers — never to detect columns — so
+# 4-digit years like "2025" (which do not match the 1-3 digit grouping) and
+# parenthesised note references like "(12)" are excluded.
+_BARE_INT_RE = re.compile(r"^-?\d{1,3}(?:\.\d{3})*$")
+
+
+def is_bare_integer(token: str) -> bool:
+    """True for a bare integer that is not already a strong German number."""
+    token = token.strip()
+    return bool(_BARE_INT_RE.match(token)) and not is_de_number(token)
+
+
+def parse_number_token(token: str) -> Optional[float]:
+    """Parse either a strong German number or a bare integer, else ``None``."""
+    token = token.strip()
+    if is_de_number(token):
+        return parse_de_number(token)
+    if _BARE_INT_RE.match(token):
+        negative = token.startswith("-")
+        core = token.lstrip("-").replace(".", "")
+        try:
+            value = float(core)
+        except ValueError:  # pragma: no cover
+            return None
+        return -value if negative else value
+    return None
+
+
 def parse_de_number(token: str) -> Optional[float]:
     """Parse a German-formatted monetary token into a float, or ``None``.
 

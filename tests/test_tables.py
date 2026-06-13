@@ -117,6 +117,22 @@ def test_single_column_page_yields_one_table():
     assert tables[0].n_columns == 2
 
 
+def test_bare_integer_values_filled_into_columns():
+    # Mio-€ layout: strong numbers (39.487/39.593) set the columns; bare ints
+    # (14/16) right-align into them; the note ref "(2)" stays out of the values.
+    words = [
+        _w(50, 200, 100, "Sachanlagen"), _w(659, 678, 100, "(2)"),
+        _w(725, 735, 100, "14"), _w(785, 795, 100, "16"),
+        _w(50, 200, 120, "Finanzanlagen"), _w(659, 678, 120, "(3)"),
+        _w(705, 735, 120, "39.487"), _w(765, 795, 120, "39.593"),
+    ]
+    tables = reconstruct_tables(words)
+    t = tables[0]
+    sach = next(it for it in t.items if "Sachanlagen" in it.label)
+    assert sach.values == [14.0, 16.0]
+    assert "(2)" in sach.label  # note ref not consumed as a value
+
+
 def test_space_thousands_values_are_reconstructed():
     # Bank "Mio €" layout: 20.717 / 22.327 rendered with a space thousands sep.
     words = [

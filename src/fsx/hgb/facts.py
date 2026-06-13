@@ -83,6 +83,8 @@ def facts_from_tables(
     currency: str = "EUR",
     emit_prior_year: bool = True,
     statement_by_page: Optional[dict[int, str]] = None,
+    scale_by_page: Optional[dict[int, int]] = None,
+    min_confidence: float = 0.5,
 ) -> list[Fact]:
     """Map reconstructed tables to Facts for the current (and prior) year.
 
@@ -94,10 +96,12 @@ def facts_from_tables(
     to a page's statement to avoid cross-statement false matches.
     """
     statement_by_page = statement_by_page or {}
+    scale_by_page = scale_by_page or {}
     facts: list[Fact] = []
     counter = 0
     for page in sorted(tables_by_page):
         statement = statement_by_page.get(page)
+        scale = scale_by_page.get(page, 1)
         panels = tables_by_page[page]
         for ti, table in enumerate(panels):
             section = _panel_section(table, ti, statement, len(panels))
@@ -116,7 +120,7 @@ def facts_from_tables(
                     if found is not None:
                         match, label = found, combined
                 pending_label = None
-                if match is None:
+                if match is None or match.confidence < min_confidence:
                     continue
 
                 current, prior = split_period_values(item.values)
@@ -144,7 +148,7 @@ def facts_from_tables(
                             concept=match.concept,
                             value=value,
                             currency=currency,
-                            scale=1,
+                            scale=scale,
                             sign=-1 if value < 0 else 1,
                             source_page=page,
                             source_table=f"P{page}_T{ti}",
@@ -176,6 +180,41 @@ def detect_statement(page_text: str) -> Optional[str]:
     return None
 
 
+def _dominant_heading(page) -> str:
+    """Return the largest-font text in the top of a PyMuPDF page.
+
+    The statement title is set in a much larger font than body text or the nav
+    breadcrumb, so the dominant heading isolates it reliably.
+    """
+    data = page.get_text("dict")
+    height = page.rect.height
+    spans: list[tuple[float, float, str]] = []
+    for block in data.get("blocks", []):
+        for line in block.get("lines", []):
+            for span in line.get("spans", []):
+                text = span["text"].strip()
+                if text and span["bbox"][1] < height * 0.55:
+                    spans.append((round(span["size"], 1), span["bbox"][1], text))
+    if not spans:
+        return ""
+    max_size = max(s[0] for s in spans)
+    return " ".join(t for size, _y, t in sorted(spans, key=lambda s: s[1]) if size >= max_size - 0.5)
+
+
+def detect_scale(page_text: str) -> int:
+    """Infer the monetary scale from a page's unit header.
+
+    "in Millionen €" / "Mio. €" -> 1_000_000; "in Tausend" / "T€" -> 1_000;
+    otherwise 1. Carried onto ``Fact.scale`` (values stay as printed).
+    """
+    t = page_text.lower()
+    if "mio" in t or "million" in t:
+        return 1_000_000
+    if "tsd" in t or "tausend" in t or "t€" in t or "t €" in t:
+        return 1_000
+    return 1
+
+
 def facts_from_pdf(
     path: str | Path,
     *,
@@ -199,14 +238,21 @@ def facts_from_pdf(
     if matcher is None:
         matcher = ConceptMatcher.from_yaml(concepts_path)
 
-    statement_by_page: dict[int, str] = {}
+    # Detect each page's statement from its dominant (largest-font) heading, not
+    # from arbitrary text — many reports repeat a nav breadcrumb listing every
+    # statement on every page. Carry the last seen statement forward so multi-
+    # page statements (Bilanz Aktiv-/Passivseite) inherit it on continuation
+    # pages that have no heading of their own.
+    statement_by_page: dict[int, Optional[str]] = {}
+    scale_by_page: dict[int, int] = {}
+    current: Optional[str] = None
     with fitz.open(path) as doc:
         for index, page in enumerate(doc, start=1):
-            if pages is not None and index not in pages:
-                continue
-            stmt = detect_statement(page.get_text("text"))
-            if stmt is not None:
-                statement_by_page[index] = stmt
+            heading_stmt = detect_statement(_dominant_heading(page))
+            if heading_stmt is not None:
+                current = heading_stmt
+            statement_by_page[index] = current
+            scale_by_page[index] = detect_scale(page.get_text("text"))
 
     tables = extract_tables(path, anonymizer=anonymizer, pages=pages)
     return facts_from_tables(
@@ -215,4 +261,5 @@ def facts_from_pdf(
         fiscal_year=fiscal_year,
         matcher=matcher,
         statement_by_page=statement_by_page,
+        scale_by_page=scale_by_page,
     )

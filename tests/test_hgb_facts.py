@@ -6,7 +6,12 @@ import pytest
 
 from fsx.extract.tables import LineItem, ReconstructedTable
 from fsx.hgb.concepts import ConceptMatcher
-from fsx.hgb.facts import detect_statement, facts_from_tables, split_period_values
+from fsx.hgb.facts import (
+    detect_scale,
+    detect_statement,
+    facts_from_tables,
+    split_period_values,
+)
 from fsx.schemas import StatementType
 
 
@@ -17,6 +22,24 @@ def test_detect_statement_handles_hyphenated_and_continuation():
     assert detect_statement("8  Commerzbank  Aktivseite  Mio €  31.12.2025") == "bilanz"
     assert detect_statement("Passivseite  Mio €") == "bilanz"
     assert detect_statement("Allgemeine Auftragsbedingungen") is None
+
+
+def test_detect_scale():
+    assert detect_scale("Aktiva in Millionen €") == 1_000_000
+    assert detect_scale("Mio. €  2025  2024") == 1_000_000
+    assert detect_scale("Angaben in T€") == 1_000
+    assert detect_scale("in Tausend Euro") == 1_000
+    assert detect_scale("(30) Eigenkapital €  31.12.2025") == 1
+
+
+def test_scale_applied_to_facts():
+    matcher = ConceptMatcher.from_yaml()
+    tables = {3: [_table([LineItem("III. Finanzanlagen", [None, 39487.0, 39593.0], y=1)])]}
+    facts = facts_from_tables(
+        tables, company_id="C1", fiscal_year=2025, matcher=matcher,
+        statement_by_page={3: "bilanz"}, scale_by_page={3: 1_000_000},
+    )
+    assert all(f.scale == 1_000_000 for f in facts)
 
 
 def test_split_period_values_total_row():

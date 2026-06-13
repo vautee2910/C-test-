@@ -19,7 +19,8 @@ def matcher():
         ("1. Roh-, Hilfs- und Betriebsstoffe", "roh hilfs und betriebsstoffe"),
         ("a) Löhne und Gehälter", "loehne und gehaelter"),
         ("III.   Finanzanlagen", "finanzanlagen"),
-        ("Gezeichnetes Kapital (Stammkapital)", "gezeichnetes kapital stammkapital"),
+        ("Gezeichnetes Kapital (Stammkapital)", "gezeichnetes kapital"),  # note ref stripped
+        ("Immaterielle Vermögensgegenstände (1)", "immaterielle vermoegensgegenstaende"),
     ],
 )
 def test_normalise_strips_enumerators_and_folds_umlauts(label, expected_norm):

@@ -27,7 +27,7 @@ from typing import Optional
 
 import re
 
-from .numbers import is_de_number, parse_de_number
+from .numbers import is_bare_integer, is_de_number, parse_de_number, parse_number_token
 
 
 @dataclass(frozen=True)
@@ -227,13 +227,23 @@ def _nearest_column(x1: float, anchors: list[float]) -> int:
     return min(range(len(anchors)), key=lambda i: abs(anchors[i] - x1))
 
 
-def _build_line_item(row: list[Word], anchors: list[float], y: float) -> LineItem:
+def _build_line_item(
+    row: list[Word], anchors: list[float], y: float, align_tol: float = 9.0
+) -> LineItem:
     values: list[Optional[float]] = [None] * len(anchors)
     label_parts: list[str] = []
     for w in row:
         if is_de_number(w.text):
+            values[_nearest_column(w.x1, anchors)] = parse_de_number(w.text)
+        elif anchors and is_bare_integer(w.text):
+            # A bare integer (e.g. a "Mio €" value like 15 / -770) counts only if
+            # it right-aligns to a column established by the strong numbers; this
+            # keeps note refs and stray digits out of the values.
             col = _nearest_column(w.x1, anchors)
-            values[col] = parse_de_number(w.text)
+            if abs(w.x1 - anchors[col]) <= align_tol:
+                values[col] = parse_number_token(w.text)
+            else:
+                label_parts.append(w.text)
         else:
             label_parts.append(w.text)
     return LineItem(label=" ".join(label_parts).strip(), values=values, y=y)

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from fsx.extract.numbers import is_de_number, parse_de_number
+from fsx.extract.numbers import (
+    is_bare_integer,
+    is_de_number,
+    parse_de_number,
+    parse_number_token,
+)
 
 
 @pytest.mark.parametrize(
@@ -40,3 +45,23 @@ def test_parse_de_number(token, expected):
 def test_non_numbers_rejected(token):
     assert not is_de_number(token)
     assert parse_de_number(token) is None
+
+
+@pytest.mark.parametrize("token, expected", [("15", 15.0), ("28", 28.0), ("-770", -770.0)])
+def test_bare_integer_parsing(token, expected):
+    assert is_bare_integer(token)
+    assert parse_number_token(token) == expected
+
+
+@pytest.mark.parametrize("token", ["2025", "(12)", "1.", "31.12.2023", "39.487"])
+def test_not_bare_integer(token):
+    # 4-digit years, note refs, enumerators, dates and strong numbers are all
+    # excluded from the bare-integer path.
+    assert not is_bare_integer(token)
+
+
+def test_parse_number_token_handles_strong_and_bare():
+    assert parse_number_token("39.487") == 39487.0
+    assert parse_number_token("-1.310") == -1310.0
+    assert parse_number_token("66") == 66.0
+    assert parse_number_token("(12)") is None
