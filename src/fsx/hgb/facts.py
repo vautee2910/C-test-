@@ -27,6 +27,25 @@ _STATEMENT_MAP = {
 }
 
 
+def _panel_section(table, panel_index: int, statement: Optional[str], n_panels: int) -> Optional[str]:
+    """Infer a Bilanz panel's section (aktiva / passiva).
+
+    Prefers an explicit AKTIVA/PASSIVA marker in the panel's labels; otherwise
+    falls back to the German convention (left panel = Aktiva) for a 2-panel
+    balance sheet. Returns ``None`` for non-Bilanz statements.
+    """
+    if statement != "bilanz":
+        return None
+    blob = " ".join(it.label for it in table.items).lower()
+    if "passiva" in blob:
+        return "passiva"
+    if "aktiva" in blob:
+        return "aktiva"
+    if n_panels >= 2:
+        return "aktiva" if panel_index == 0 else "passiva"
+    return None
+
+
 def split_period_values(values: list[Optional[float]]) -> tuple[Optional[float], Optional[float]]:
     """Return ``(current_year, prior_year)`` from a row's column values.
 
@@ -66,7 +85,9 @@ def facts_from_tables(
     counter = 0
     for page in sorted(tables_by_page):
         statement = statement_by_page.get(page)
-        for ti, table in enumerate(tables_by_page[page]):
+        panels = tables_by_page[page]
+        for ti, table in enumerate(panels):
+            section = _panel_section(table, ti, statement, len(panels))
             pending_label: Optional[str] = None
             for item in table.items:
                 if not item.has_values:
@@ -75,10 +96,10 @@ def facts_from_tables(
                     continue
 
                 label = item.label
-                match = matcher.match(label, statement=statement)
+                match = matcher.match(label, statement=statement, section=section)
                 if match is None and pending_label and not has_leading_enumerator(item.label):
                     combined = f"{pending_label} {item.label}".strip()
-                    found = matcher.match(combined, statement=statement)
+                    found = matcher.match(combined, statement=statement, section=section)
                     if found is not None:
                         match, label = found, combined
                 pending_label = None

@@ -64,16 +64,17 @@ def _resolve_values(
 
     years = sorted({f.fiscal_year for f in facts})
 
-    # Derived aggregates: reported value wins, else compute from components.
+    # Derived aggregates: reported value wins, else sum the present components
+    # (at least min_present of them).
     for m in derived:
         for year in years:
             if year in values.get(m.name, {}):
                 continue  # already reported
-            if any(year not in values.get(c, {}) for c in m.required):
+            present = [c for c in m.components if year in values.get(c, {})]
+            if len(present) < m.min_present:
                 continue
-            used = list(m.required) + [c for c in m.optional if year in values.get(c, {})]
-            total = sum(values[c][year][0] for c in used)
-            values[m.name][year] = (total, " + ".join(used))
+            total = sum(values[c][year][0] for c in present)
+            values[m.name][year] = (total, " + ".join(present))
 
     # Ratios reference concepts or derived metrics resolved above.
     for r in ratios:

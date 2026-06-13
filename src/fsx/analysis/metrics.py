@@ -17,13 +17,16 @@ class DerivedMetric:
 
     ``reported_concept`` is the concept key under which the statement may already
     report this aggregate directly; if a fact with that concept exists it is
-    preferred over computing. ``required`` components must all be present to
-    compute; ``optional`` ones are added when present.
+    preferred over computing. The aggregate is computed by summing whichever
+    ``components`` are present, as long as at least ``min_present`` of them are —
+    so e.g. a Materialaufwand that consists only of "bezogene Leistungen" (no
+    Roh-/Hilfsstoffe) still resolves. The ``formula`` records exactly which
+    components were summed.
     """
 
     name: str
-    required: tuple[str, ...]
-    optional: tuple[str, ...] = ()
+    components: tuple[str, ...]
+    min_present: int = 1
     reported_concept: str | None = None
 
 
@@ -41,18 +44,20 @@ class Ratio:
 DEFAULT_DERIVED: tuple[DerivedMetric, ...] = (
     DerivedMetric(
         name="bilanzsumme",
-        required=("summe_anlagevermoegen", "summe_umlaufvermoegen"),
-        optional=("rechnungsabgrenzungsposten_aktiv",),
+        components=("summe_anlagevermoegen", "summe_umlaufvermoegen", "rechnungsabgrenzungsposten_aktiv"),
+        min_present=2,
         reported_concept="bilanzsumme",
     ),
     DerivedMetric(
         name="personalaufwand",
-        required=("loehne_gehaelter", "soziale_abgaben"),
+        components=("loehne_gehaelter", "soziale_abgaben"),
+        min_present=1,
         reported_concept="personalaufwand",
     ),
     DerivedMetric(
         name="materialaufwand",
-        required=("aufwand_rhb", "aufwand_bezogene_leistungen"),
+        components=("aufwand_rhb", "aufwand_bezogene_leistungen"),
+        min_present=1,
         reported_concept="materialaufwand",
     ),
 )

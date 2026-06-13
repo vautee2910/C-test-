@@ -101,7 +101,7 @@ concepts:
   - {concept: soziale_abgaben, statement: guv, section: guv,
      synonyms: ["soziale Abgaben und Aufwendungen für Altersversorgung und für Unterstützung", "soziale Abgaben"]}
   - {concept: abschreibungen, statement: guv, section: guv,
-     synonyms: ["Abschreibungen", "Abschreibungen auf immaterielle Vermögensgegenstände des Anlagevermögens und Sachanlagen"]}
+     synonyms: ["Abschreibungen", "Abschreibungen auf immaterielle Vermögensgegenstände des Anlagevermögens und Sachanlagen", "auf immaterielle Vermögensgegenstände des Anlagevermögens und Sachanlagen"]}
   - {concept: sonstige_betriebliche_aufwendungen, statement: guv, section: guv,
      synonyms: ["sonstige betriebliche Aufwendungen"]}
   - {concept: zinsaufwand, statement: guv, section: guv,

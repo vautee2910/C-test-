@@ -21,7 +21,8 @@ DEFAULT_HGB_CONCEPTS = Path(__file__).resolve().parents[3] / "config" / "hgb_con
 
 _UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
 # Leading enumerators: roman (i., ii.), arabic (1., 2)), single letters (a)).
-_ENUM_RE = re.compile(r"^\s*(?:[ivxlcdm]+[.)]|\d+[.)]|[a-z][.)])\s+", re.IGNORECASE)
+# The separator may be ".", ")" or "," — some reports (or OCR) use "5," / "8,".
+_ENUM_RE = re.compile(r"^\s*(?:[ivxlcdm]+[.,)]|\d+[.,)]|[a-z][.,)])\s+", re.IGNORECASE)
 
 
 def has_leading_enumerator(label: str) -> bool:
@@ -107,12 +108,19 @@ class ConceptMatcher:
     def from_yaml(cls, path: str | Path = DEFAULT_HGB_CONCEPTS, **kw) -> "ConceptMatcher":
         return cls(load_concepts(path), **kw)
 
-    def match(self, label: str, statement: Optional[str] = None) -> Optional[ConceptMatch]:
-        """Match ``label`` to a concept, optionally restricted to ``statement``.
+    def match(
+        self,
+        label: str,
+        statement: Optional[str] = None,
+        section: Optional[str] = None,
+    ) -> Optional[ConceptMatch]:
+        """Match ``label`` to a concept, optionally restricted to context.
 
         Passing the page's ``statement`` ("bilanz" / "guv") prevents
         cross-statement false matches (e.g. a GuV line mentioning
-        "Anlagevermögens" binding to the Bilanz concept).
+        "Anlagevermögens" binding to the Bilanz concept). Passing ``section``
+        ("aktiva" / "passiva") disambiguates labels shared across sections, such
+        as "Rechnungsabgrenzungsposten" on both Bilanz sides.
         """
         norm = normalise_label(label)
         if not norm:
@@ -121,7 +129,8 @@ class ConceptMatcher:
         candidates = [
             (n, c, s)
             for (n, c, s) in self._normalised
-            if statement is None or c.statement == statement
+            if (statement is None or c.statement == statement)
+            and (section is None or c.section is None or c.section == section)
         ]
 
         # 1. Exact normalised match.

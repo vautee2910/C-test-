@@ -61,6 +61,20 @@ def test_fuzzy_match_tolerates_minor_wording(matcher):
     assert m.confidence < 1.0
 
 
+def test_comma_enumerator_is_stripped(matcher):
+    # Some reports / OCR write "5," instead of "5." before the label.
+    m = matcher.match("5, sonstige betriebliche Aufwendungen", statement="guv")
+    assert m is not None
+    assert m.concept == "sonstige_betriebliche_aufwendungen"
+
+
+def test_section_filter_disambiguates_rechnungsabgrenzungsposten(matcher):
+    aktiv = matcher.match("Rechnungsabgrenzungsposten", statement="bilanz", section="aktiva")
+    passiv = matcher.match("Rechnungsabgrenzungsposten", statement="bilanz", section="passiva")
+    assert aktiv.concept == "rechnungsabgrenzungsposten_aktiv"
+    assert passiv.concept == "rechnungsabgrenzungsposten_passiv"
+
+
 def test_unknown_label_returns_none(matcher):
     assert matcher.match("Erläuterungen zu dieser Musterauswertung") is None
     assert matcher.match("[UNTERNEHMEN_1]") is None

@@ -101,5 +101,14 @@ def test_anomaly_threshold_configurable():
     assert _by(feats, "umsatzerloese", 2023).flag == FeatureFlag.INCREASE
 
 
+def test_aggregate_computes_from_single_present_component():
+    # NOW-style Materialaufwand: only "bezogene Leistungen", no Roh-/Hilfsstoffe.
+    facts = [_fact("aufwand_bezogene_leistungen", 2021, -2698295.39)]
+    feats = build_features(facts)
+    ma = _by(feats, "materialaufwand", 2021)
+    assert ma.value == pytest.approx(-2698295.39)
+    assert ma.formula == "aufwand_bezogene_leistungen"
+
+
 def test_empty_facts_yield_no_features():
     assert build_features([]) == []
