@@ -1,0 +1,33 @@
+# CPU-only dependency set for the local financial-statement extraction pipeline.
+#
+# IMPORTANT: torch / torchvision MUST come from the PyTorch CPU wheel index,
+# NOT from PyPI. The PyPI Linux wheels drag in the full CUDA stack
+# (nvidia-*, triton, cuda-toolkit ≈ 7-9 GB) which is useless on a CPU box.
+#
+# The CPU index (https://download.pytorch.org/whl/cpu) must be reachable.
+# In the Claude Code on the web environment this host has to be allowlisted
+# in the network policy (see README.md → "Network requirements").
+#
+# Install via scripts/setup_cpu.sh (handles the two-step index ordering),
+# or manually:
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+#   pip install -r requirements-cpu.txt
+
+# --- Document parsing / layout ---
+docling==2.102.1
+
+# --- (uncomment as the pipeline grows) ---
+# pdfplumber
+# camelot-py[cv]
+# ocrmypdf
+# pymupdf
+
+# --- Anonymisation ---
+# presidio-analyzer
+# presidio-anonymizer
+# spacy
+
+# --- Structured data / analysis ---
+# pandas
+# pyarrow
+# duckdb
