@@ -95,11 +95,12 @@ echo "==> Verifying install ..."
 python - <<'PY'
 import torch
 from docling.document_converter import DocumentConverter  # noqa: F401
+from importlib.metadata import version
 print(f"torch      : {torch.__version__}  (cuda build: {torch.version.cuda})")
 print(f"cuda avail : {torch.cuda.is_available()}")
 print(f"threads    : {torch.get_num_threads()}")
-import docling
-print(f"docling    : {docling.__version__}")
+# docling exposes no __version__ attribute; read it from package metadata.
+print(f"docling    : {version('docling')}")
 print("OK: docling + CPU torch import cleanly.")
 PY
 

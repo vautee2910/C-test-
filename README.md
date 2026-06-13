@@ -32,13 +32,22 @@ these hosts must be allowlisted:
 | `download.pytorch.org` | Wheel **index** (HTML listing) for the lean CPU torch build. |
 | `download-r2.pytorch.org` | **CDN that serves the actual wheel bytes** (~200 MB). The index redirects downloads here — allowlisting only `download.pytorch.org` makes the index return 200 while the install still 403s mid-download. Without the CPU wheel, PyPI pulls the full CUDA stack ≈ 7–9 GB. |
 | `huggingface.co`, `*.hf.co` | HF API + small files for Docling layout / TableFormer models. |
-| `cas-bridge.xethub.hf.co`, `transfer.xethub.hf.co` (or `*.xethub.hf.co`) | **HF Xet LFS backend** that serves the large model weights. Same trap as above: `huggingface.co` can return 200 while weight downloads 403. |
+| `cas-server.xethub.hf.co` | **HF Xet CAS reconstruction API** — the control endpoint that resolves a file into its content chunks. Required *before* any weight bytes flow. |
+| `us.aws.cdn.hf.co` | **HF Xet data CDN** (the `xet-bridge-us` backend) that actually serves the weight bytes. Both this and `cas-server` must be reachable or `snapshot_download` 403s. |
+| `cas-bridge.xethub.hf.co`, `transfer.xethub.hf.co` | Other Xet hosts seen in HF docs. Reachable here (they answer with a CloudFront origin 403 on bare-root requests), but on this account/region the weights resolve through `cas-server` + `us.aws.cdn.hf.co` above, so those two are the ones that matter. |
 
-> **Note:** the legacy `cdn-lfs*.huggingface.co` LFS hosts no longer resolve
-> here — HF serves LFS objects via the Xet backend above. Keep Xet enabled and
-> allowlist `*.xethub.hf.co`. Only if Xet is unavailable, set
-> `HF_HUB_DISABLE_XET=1` to fall back to plain HTTPS downloads (which then need
-> whatever `cdn-lfs` host HF redirects to allowlisted).
+> **Verified 2026-06-13 (this environment):** a literal allowlist of
+> `cas-bridge`/`transfer.xethub.hf.co` is **not sufficient** — Docling's weights
+> resolve through `cas-server.xethub.hf.co` → `us.aws.cdn.hf.co`, and both were
+> blocked (HTTP 403 with header `x-deny-reason: host_not_allowed`, the egress
+> proxy's block signature, vs. a `server: CloudFront` origin 403 which means
+> *reachable*). The `*.hf.co` / `*.xethub.hf.co` wildcards were **not honoured** —
+> only literal hostnames took effect. Allowlist `cas-server.xethub.hf.co` and
+> `us.aws.cdn.hf.co` explicitly (in addition to the wildcards).
+>
+> **Note:** the legacy `cdn-lfs*.hf.co` LFS hosts are also blocked here, so
+> `HF_HUB_DISABLE_XET=1` does **not** provide a working fallback in this
+> environment (it redirects to `us.aws.cdn.hf.co`, which is blocked too).
 
 > The network policy is fixed when the environment is created. To change it,
 > recreate the web environment with the hosts above allowlisted.
