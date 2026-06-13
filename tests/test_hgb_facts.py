@@ -7,6 +7,7 @@ import pytest
 from fsx.extract.tables import LineItem, ReconstructedTable
 from fsx.hgb.concepts import ConceptMatcher
 from fsx.hgb.facts import (
+    detect_has_prior_year,
     detect_scale,
     detect_statement,
     facts_from_tables,
@@ -58,6 +59,24 @@ def test_split_period_values_two_columns():
 
 def test_split_period_values_single_column():
     assert split_period_values([1234.0]) == (1234.0, None)
+
+
+def test_split_period_values_single_period_rightmost_is_current():
+    # Single-period "EUR EUR" (sub-amount/total) layout, no prior column.
+    assert split_period_values([None, 349216.83], has_prior=False) == (349216.83, None)
+    assert split_period_values([100.0, 349216.83], has_prior=False) == (349216.83, None)
+
+
+def test_detect_has_prior_year():
+    assert detect_has_prior_year("Geschäftsjahr Vorjahr EUR EUR", 2024) is True
+    assert detect_has_prior_year("zum 31.12.2025 31.12.2024", 2025) is True  # prior present
+    assert detect_has_prior_year("vom 01.01.2024 bis 31.12.2024 EUR EUR", 2024) is False
+
+
+def test_kontennachweis_heading_is_not_a_summary_statement():
+    # Account-detail pages get their own key so no concepts match them.
+    assert detect_statement("KONTENNACHWEIS zur Bilanz zum 31.12.2024") == "kontennachweis"
+    assert detect_statement("Kontennachweis zur G.u.V.") == "kontennachweis"
 
 
 def _table(items):

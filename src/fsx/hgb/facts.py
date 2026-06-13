@@ -59,14 +59,21 @@ def _panel_section(table, panel_index: int, statement: Optional[str], n_panels: 
     return None
 
 
-def split_period_values(values: list[Optional[float]]) -> tuple[Optional[float], Optional[float]]:
+def split_period_values(
+    values: list[Optional[float]], has_prior: bool = True
+) -> tuple[Optional[float], Optional[float]]:
     """Return ``(current_year, prior_year)`` from a row's column values.
 
-    Rightmost column = prior year; current year = first non-empty among the rest
-    (the line's own amount rather than a group subtotal sharing the row).
+    With a prior-year column: rightmost = prior year; current = first non-empty
+    among the rest (the line's own amount, not a subtotal sharing the row).
+    Without one (single-period report, e.g. an "EUR EUR" sub-amount/total
+    layout): the rightmost value is the *current* year and there is no prior.
     """
     if not values:
         return (None, None)
+    if not has_prior:
+        present = [v for v in values if v is not None]
+        return (present[-1] if present else None, None)
     if len(values) == 1:
         return (values[0], None)
     prior = values[-1]
@@ -84,6 +91,7 @@ def facts_from_tables(
     emit_prior_year: bool = True,
     statement_by_page: Optional[dict[int, str]] = None,
     scale_by_page: Optional[dict[int, int]] = None,
+    has_prior_by_page: Optional[dict[int, bool]] = None,
     min_confidence: float = 0.5,
 ) -> list[Fact]:
     """Map reconstructed tables to Facts for the current (and prior) year.
@@ -97,11 +105,13 @@ def facts_from_tables(
     """
     statement_by_page = statement_by_page or {}
     scale_by_page = scale_by_page or {}
+    has_prior_by_page = has_prior_by_page or {}
     facts: list[Fact] = []
     counter = 0
     for page in sorted(tables_by_page):
         statement = statement_by_page.get(page)
         scale = scale_by_page.get(page, 1)
+        has_prior = has_prior_by_page.get(page, True)
         panels = tables_by_page[page]
         for ti, table in enumerate(panels):
             section = _panel_section(table, ti, statement, len(panels))
@@ -142,7 +152,7 @@ def facts_from_tables(
                 if not orphan:
                     pending_header = None
 
-                current, prior = split_period_values(item.values)
+                current, prior = split_period_values(item.values, has_prior=has_prior)
                 periods = [(fiscal_year, current)]
                 if emit_prior_year:
                     periods.append((fiscal_year - 1, prior))
@@ -183,6 +193,9 @@ def facts_from_tables(
 # "Passivseite" catch multi-page balance sheets whose only "Bilanz" title sits on
 # an earlier page. Order: most specific first.
 _STATEMENT_TITLES = [
+    # Account-level detail pages (Kontennachweis) must not be matched as a
+    # summary statement; tagging them with their own key yields no concepts.
+    ("kontennachweis", ("kontennachweis",)),
     ("guv", ("gewinn und verlust",)),
     ("anlagenspiegel", ("anlagenspiegel", "entwicklung des anlagevermögens")),
     ("bilanz", ("bilanz", "aktivseite", "passivseite")),
@@ -218,6 +231,16 @@ def _dominant_heading(page) -> str:
         return ""
     max_size = max(s[0] for s in spans)
     return " ".join(t for size, _y, t in sorted(spans, key=lambda s: s[1]) if size >= max_size - 0.5)
+
+
+def detect_has_prior_year(page_text: str, fiscal_year: int) -> bool:
+    """True if the page shows a prior-year column (a "Vorjahr"/prior-year date).
+
+    Single-period statements (no comparative column) otherwise get their values
+    mis-dated to the prior year by the rightmost-is-prior rule.
+    """
+    t = page_text.lower()
+    return ("vorjahr" in t) or (str(fiscal_year - 1) in page_text)
 
 
 def detect_scale(page_text: str) -> int:
@@ -264,14 +287,22 @@ def facts_from_pdf(
     # pages that have no heading of their own.
     statement_by_page: dict[int, Optional[str]] = {}
     scale_by_page: dict[int, int] = {}
+    prior_by_page: dict[int, bool] = {}
     current: Optional[str] = None
     with fitz.open(path) as doc:
         for index, page in enumerate(doc, start=1):
-            heading_stmt = detect_statement(_dominant_heading(page))
-            if heading_stmt is not None:
-                current = heading_stmt
+            text = page.get_text("text")
+            # A Kontennachweis page overrides the heading regardless of font size
+            # (its title is often smaller than the AKTIVA/PASSIVA band).
+            if "kontennachweis" in text.lower():
+                current = "kontennachweis"
+            else:
+                heading_stmt = detect_statement(_dominant_heading(page))
+                if heading_stmt is not None:
+                    current = heading_stmt
             statement_by_page[index] = current
-            scale_by_page[index] = detect_scale(page.get_text("text"))
+            scale_by_page[index] = detect_scale(text)
+            prior_by_page[index] = detect_has_prior_year(text, fiscal_year)
 
     tables = extract_tables(path, anonymizer=anonymizer, pages=pages)
     return facts_from_tables(
@@ -281,4 +312,5 @@ def facts_from_pdf(
         matcher=matcher,
         statement_by_page=statement_by_page,
         scale_by_page=scale_by_page,
+        has_prior_by_page=prior_by_page,
     )
