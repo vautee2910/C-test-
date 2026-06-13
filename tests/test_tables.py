@@ -12,6 +12,7 @@ from fsx.extract.tables import (
     cluster_rows,
     detect_value_columns,
     find_column_gutters,
+    merge_number_fragments,
     reconstruct_tables,
 )
 
@@ -115,6 +116,14 @@ def test_single_column_page_yields_one_table():
     tables = reconstruct_tables(words)
     assert len(tables) == 1
     assert tables[0].n_columns == 2
+
+
+def test_endash_negative_is_attached_to_number():
+    # Bank GuV: "– 10 658" -> -10.658 (en dash sign + space thousands).
+    row = [_w(400, 408, 100, "–"), _w(410, 420, 100, "10"), _w(421, 440, 100, "658")]
+    merged = merge_number_fragments(row)
+    assert len(merged) == 1
+    assert merged[0].text == "-10.658"
 
 
 def test_bare_integer_values_filled_into_columns():

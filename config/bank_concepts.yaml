@@ -1,0 +1,70 @@
+# Bank concept knowledge base — SHARED across German bank annual statements
+# (RechKredV / Formblatt 1 + 2). Loaded ALONGSIDE the industrial HGB KB; only
+# bank-SPECIFIC positions live here, shared ones (Sachanlagen, Eigenkapital
+# components, Rückstellungen, Sonstige Verbindlichkeiten, RAP, Personalaufwand,
+# Abschreibungen, Steuern, Jahresüberschuss) are reused from hgb_concepts.yaml.
+
+concepts:
+  # ------------------------------ Bilanz / Aktiva --------------------------- #
+  - {concept: barreserve, statement: bilanz, section: aktiva,
+     synonyms: ["Barreserve", "Kassenbestand und Guthaben bei Zentralnotenbanken"]}
+  - {concept: forderungen_kreditinstitute, statement: bilanz, section: aktiva,
+     synonyms: ["Forderungen an Kreditinstitute"]}
+  - {concept: forderungen_kunden, statement: bilanz, section: aktiva,
+     synonyms: ["Forderungen an Kunden"]}
+  - {concept: schuldverschreibungen, statement: bilanz, section: aktiva,
+     synonyms: ["Schuldverschreibungen und andere festverzinsliche Wertpapiere"]}
+  - {concept: aktien_wertpapiere, statement: bilanz, section: aktiva,
+     synonyms: ["Aktien und andere nicht festverzinsliche Wertpapiere"]}
+  - {concept: handelsbestand_aktiv, statement: bilanz, section: aktiva,
+     synonyms: ["Handelsbestand"]}
+  - {concept: beteiligungen, statement: bilanz, section: aktiva,
+     synonyms: ["Beteiligungen"]}
+  - {concept: anteile_verbundene_unternehmen, statement: bilanz, section: aktiva,
+     synonyms: ["Anteile an verbundenen Unternehmen"]}
+  - {concept: treuhandvermoegen, statement: bilanz, section: aktiva,
+     synonyms: ["Treuhandvermögen"]}
+  - {concept: immaterielle_anlagewerte, statement: bilanz, section: aktiva,
+     synonyms: ["Immaterielle Anlagewerte"]}
+  - {concept: sonstige_vermoegensgegenstaende_bank, statement: bilanz, section: aktiva,
+     synonyms: ["Sonstige Vermögensgegenstände"]}
+
+  # ------------------------------ Bilanz / Passiva -------------------------- #
+  - {concept: verbindlichkeiten_kreditinstitute, statement: bilanz, section: passiva,
+     synonyms: ["Verbindlichkeiten gegenüber Kreditinstituten"]}
+  - {concept: verbindlichkeiten_kunden, statement: bilanz, section: passiva,
+     synonyms: ["Verbindlichkeiten gegenüber Kunden"]}
+  - {concept: verbriefte_verbindlichkeiten, statement: bilanz, section: passiva,
+     synonyms: ["Verbriefte Verbindlichkeiten"]}
+  - {concept: handelsbestand_passiv, statement: bilanz, section: passiva,
+     synonyms: ["Handelsbestand"]}
+  - {concept: treuhandverbindlichkeiten, statement: bilanz, section: passiva,
+     synonyms: ["Treuhandverbindlichkeiten"]}
+  - {concept: nachrangige_verbindlichkeiten, statement: bilanz, section: passiva,
+     synonyms: ["Nachrangige Verbindlichkeiten"]}
+  - {concept: fonds_bankrisiken, statement: bilanz, section: passiva,
+     synonyms: ["Fonds für allgemeine Bankrisiken"]}
+  - {concept: kapitalruecklage, statement: bilanz, section: passiva,
+     synonyms: ["Kapitalrücklage"]}
+  - {concept: bilanzsumme, statement: bilanz, section: null,
+     synonyms: ["Summe der Aktiva", "Summe der Passiva", "Bilanzsumme"]}
+
+  # --------------------------------- GuV ------------------------------------ #
+  - {concept: zinsertraege, statement: guv, section: guv,
+     synonyms: ["Zinserträge", "Zinserträge aus"]}
+  - {concept: zinsaufwendungen, statement: guv, section: guv,
+     synonyms: ["Zinsaufwendungen", "Zinsaufwendungen aus dem Bankgeschäft"]}
+  - {concept: laufende_ertraege, statement: guv, section: guv,
+     synonyms: ["Laufende Erträge aus"]}
+  - {concept: provisionsertraege, statement: guv, section: guv,
+     synonyms: ["Provisionserträge"]}
+  - {concept: provisionsaufwendungen, statement: guv, section: guv,
+     synonyms: ["Provisionsaufwendungen"]}
+  - {concept: handelsergebnis, statement: guv, section: guv,
+     synonyms: ["Nettoertrag/-aufwand des Handelsbestands", "Nettoertrag des Handelsbestands", "Nettoaufwand des Handelsbestands"]}
+  - {concept: verwaltungsaufwand, statement: guv, section: guv,
+     synonyms: ["Allgemeine Verwaltungsaufwendungen"]}
+  - {concept: risikovorsorge, statement: guv, section: guv,
+     synonyms: ["Abschreibungen und Wertberichtigungen auf Forderungen und bestimmte Wertpapiere"]}
+  - {concept: ergebnis_normale_geschaeftstaetigkeit, statement: guv, section: guv,
+     synonyms: ["Ergebnis der normalen Geschäftstätigkeit"]}

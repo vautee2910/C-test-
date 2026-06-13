@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..schemas import Fact, PeriodType, StatementType
-from .concepts import DEFAULT_HGB_CONCEPTS, ConceptMatcher, has_leading_enumerator
+from .concepts import DEFAULT_CONCEPTS, ConceptMatcher, has_leading_enumerator
 
 _STATEMENT_MAP = {
     "bilanz": StatementType.BILANZ,
@@ -222,7 +222,7 @@ def facts_from_pdf(
     company_id: str,
     fiscal_year: int,
     pages: Optional[list[int]] = None,
-    concepts_path: str | Path = DEFAULT_HGB_CONCEPTS,
+    concepts_path: str | Path | tuple = DEFAULT_CONCEPTS,
     matcher: Optional[ConceptMatcher] = None,
 ) -> list[Fact]:
     """Convenience: PDF -> reconstructed tables -> Facts, in one call.

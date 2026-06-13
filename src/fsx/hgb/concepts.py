@@ -16,8 +16,14 @@ from typing import Optional
 
 import yaml
 
-# config/hgb_concepts.yaml at the repo root (src/fsx/hgb/concepts.py -> repo).
-DEFAULT_HGB_CONCEPTS = Path(__file__).resolve().parents[3] / "config" / "hgb_concepts.yaml"
+# config/*.yaml at the repo root (src/fsx/hgb/concepts.py -> repo).
+_CONFIG_DIR = Path(__file__).resolve().parents[3] / "config"
+DEFAULT_HGB_CONCEPTS = _CONFIG_DIR / "hgb_concepts.yaml"
+DEFAULT_BANK_CONCEPTS = _CONFIG_DIR / "bank_concepts.yaml"
+# Default knowledge base: industrial HGB plus bank RechKredV, so either kind of
+# report resolves without the caller choosing. Concept keys are distinct; shared
+# positions (Sachanlagen, Eigenkapital, …) appear once and are simply reused.
+DEFAULT_CONCEPTS = (DEFAULT_HGB_CONCEPTS, DEFAULT_BANK_CONCEPTS)
 
 _UMLAUTS = {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
 # Leading enumerators: roman (i., ii.), arabic (1., 2)), single letters (a)).
@@ -68,18 +74,24 @@ class ConceptMatch:
     matched_synonym: str
 
 
-def load_concepts(path: str | Path = DEFAULT_HGB_CONCEPTS) -> list[Concept]:
-    data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+def load_concepts(
+    paths: str | Path | tuple[str | Path, ...] = DEFAULT_CONCEPTS,
+) -> list[Concept]:
+    """Load concepts from one or more YAML files (later files append)."""
+    if isinstance(paths, (str, Path)):
+        paths = (paths,)
     concepts: list[Concept] = []
-    for entry in data.get("concepts", []):
-        concepts.append(
-            Concept(
-                concept=entry["concept"],
-                statement=entry.get("statement", "unknown"),
-                section=entry.get("section"),
-                synonyms=tuple(entry.get("synonyms", [])),
+    for path in paths:
+        data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+        for entry in data.get("concepts", []):
+            concepts.append(
+                Concept(
+                    concept=entry["concept"],
+                    statement=entry.get("statement", "unknown"),
+                    section=entry.get("section"),
+                    synonyms=tuple(entry.get("synonyms", [])),
+                )
             )
-        )
     return concepts
 
 
@@ -107,8 +119,8 @@ class ConceptMatcher:
                     self._normalised.append((norm, c, syn))
 
     @classmethod
-    def from_yaml(cls, path: str | Path = DEFAULT_HGB_CONCEPTS, **kw) -> "ConceptMatcher":
-        return cls(load_concepts(path), **kw)
+    def from_yaml(cls, paths: str | Path | tuple = DEFAULT_CONCEPTS, **kw) -> "ConceptMatcher":
+        return cls(load_concepts(paths), **kw)
 
     def match(
         self,

@@ -76,6 +76,15 @@ def test_section_filter_disambiguates_rechnungsabgrenzungsposten(matcher):
     assert passiv.concept == "rechnungsabgrenzungsposten_passiv"
 
 
+def test_bank_concepts_are_loaded_alongside_industrial(matcher):
+    # The default matcher loads both the industrial and the bank KB.
+    assert matcher.match("Forderungen an Kunden", statement="bilanz", section="aktiva").concept == "forderungen_kunden"
+    assert matcher.match("Provisionserträge", statement="guv").concept == "provisionsertraege"
+    assert matcher.match("Nachrangige Verbindlichkeiten", statement="bilanz", section="passiva").concept == "nachrangige_verbindlichkeiten"
+    # An industrial concept still resolves from the same matcher.
+    assert matcher.match("II. Sachanlagen").concept == "sachanlagen"
+
+
 def test_unknown_label_returns_none(matcher):
     assert matcher.match("Erläuterungen zu dieser Musterauswertung") is None
     assert matcher.match("[UNTERNEHMEN_1]") is None

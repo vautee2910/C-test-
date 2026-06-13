@@ -76,27 +76,45 @@ class ReconstructedTable:
 # optional ",dd" tail and optional trailing minus ("415,00", "423,24", "96-").
 _NUM_HEAD = re.compile(r"^-?\d{1,3}(?:\.\d{3})*$")
 _NUM_TAIL = re.compile(r"^\d{3}(?:,\d+)?-?$")
+# Lone dash tokens used as a leading minus sign (bank reports use an en dash).
+_DASHES = {"-", "‐", "‑", "‒", "–", "—", "−"}
 
 
 def merge_number_fragments(row: list[Word], max_gap: float = 6.0) -> list[Word]:
-    """Re-join numbers split into separate words by a space thousands separator.
+    """Re-join numbers split into separate words, and attach detached minus signs.
 
-    Some statements (notably Anlagenspiegel exports / OCR) render ``550.415,00``
-    as two tokens ``550`` and ``415,00``. When a grouped-integer head is followed
-    within ``max_gap`` px by a 3-digit tail, they are merged back into one word.
-    Column spacing is far larger than ``max_gap``, so genuine adjacent columns
-    are never merged.
+    Some statements (Anlagenspiegel exports, bank "Mio €" sheets, OCR) render
+    ``550.415,00`` as ``550`` + ``415,00`` and a negative ``-10.658`` as a lone
+    dash ``–`` then ``10`` ``658``. Grouped-integer heads followed within
+    ``max_gap`` px by a 3-digit tail are merged; a lone leading dash before a
+    number becomes its sign. Column spacing is far larger than ``max_gap``, so
+    genuine adjacent columns are never merged.
     """
-    out: list[Word] = []
+    # Phase 1: join space-split thousands groups.
+    joined: list[Word] = []
     for w in sorted(row, key=lambda w: w.x0):
         if (
-            out
-            and _NUM_HEAD.match(out[-1].text)
+            joined
+            and _NUM_HEAD.match(joined[-1].text)
             and _NUM_TAIL.match(w.text)
-            and (w.x0 - out[-1].x1) <= max_gap
+            and (w.x0 - joined[-1].x1) <= max_gap
         ):
-            p = out.pop()
-            out.append(Word(p.x0, p.y0, w.x1, w.y1, f"{p.text}.{w.text}"))
+            p = joined.pop()
+            joined.append(Word(p.x0, p.y0, w.x1, w.y1, f"{p.text}.{w.text}"))
+        else:
+            joined.append(w)
+
+    # Phase 2: attach a lone leading dash to the number that follows it.
+    out: list[Word] = []
+    for w in joined:
+        if (
+            out
+            and out[-1].text in _DASHES
+            and (w.x0 - out[-1].x1) <= max_gap
+            and (is_de_number(w.text) or is_bare_integer(w.text))
+        ):
+            d = out.pop()
+            out.append(Word(d.x0, d.y0, w.x1, w.y1, f"-{w.text}"))
         else:
             out.append(w)
     return out
