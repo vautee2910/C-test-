@@ -15,6 +15,7 @@
 
 # --- Document parsing / layout ---
 docling==2.102.1
+pymupdf==1.27.2.3
 
 # --- Remote LLM gateway (OpenWebUI / OpenAI-compatible) ---
 openai
@@ -28,7 +29,6 @@ pyyaml
 # pdfplumber
 # camelot-py[cv]
 # ocrmypdf
-# pymupdf
 
 # --- Anonymisation ---
 # presidio-analyzer
