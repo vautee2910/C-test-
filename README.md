@@ -33,8 +33,9 @@ these hosts must be allowlisted:
 | `download-r2.pytorch.org` | **CDN that serves the actual wheel bytes** (~200 MB). The index redirects downloads here — allowlisting only `download.pytorch.org` makes the index return 200 while the install still 403s mid-download. Without the CPU wheel, PyPI pulls the full CUDA stack ≈ 7–9 GB. |
 | `huggingface.co`, `*.hf.co` | HF API + small files for Docling layout / TableFormer models. |
 | `cas-server.xethub.hf.co` | **HF Xet CAS reconstruction API** — the control endpoint that resolves a file into its content chunks. Required *before* any weight bytes flow. |
-| `us.aws.cdn.hf.co` | **HF Xet data CDN** (the `xet-bridge-us` backend) that actually serves the weight bytes. Both this and `cas-server` must be reachable or `snapshot_download` 403s. |
-| `cas-bridge.xethub.hf.co`, `transfer.xethub.hf.co` | Other Xet hosts seen in HF docs. Reachable here (they answer with a CloudFront origin 403 on bare-root requests), but on this account/region the weights resolve through `cas-server` + `us.aws.cdn.hf.co` above, so those two are the ones that matter. |
+| `us.aws.cdn.hf.co` | **HF Xet data CDN — AWS backend.** Serves *some* of the weight xorbs. Reachable, but not sufficient on its own (see below). |
+| `us.gcp.cdn.hf.co` | **HF Xet data CDN — GCP backend.** Serves the *other* weight xorbs. Xet shards a single file's chunks across BOTH the AWS and GCP CDN backends, so allowlisting only `us.aws.cdn.hf.co` still 403s mid-download on the chunks that resolve to GCP. Both CDN backends must be allowlisted. |
+| `cas-bridge.xethub.hf.co`, `transfer.xethub.hf.co` | Other Xet hosts seen in HF docs. Reachable here (they answer with a CloudFront origin 403 on bare-root requests), but on this account/region the weights resolve through `cas-server` + the `us.*.cdn.hf.co` CDN backends above, so those are the ones that matter. |
 
 > **Verified 2026-06-13 (this environment):** a literal allowlist of
 > `cas-bridge`/`transfer.xethub.hf.co` is **not sufficient** — Docling's weights
@@ -44,6 +45,18 @@ these hosts must be allowlisted:
 > *reachable*). The `*.hf.co` / `*.xethub.hf.co` wildcards were **not honoured** —
 > only literal hostnames took effect. Allowlist `cas-server.xethub.hf.co` and
 > `us.aws.cdn.hf.co` explicitly (in addition to the wildcards).
+>
+> **Update 2026-06-13 (Xet CDN sharding):** with `cas-server.xethub.hf.co` and
+> `us.aws.cdn.hf.co` both allowlisted and confirmed reachable, the Docling
+> weight download *still* failed. The Xet client log
+> (`~/.cache/huggingface/xet/logs/`) shows it sharding a single file's chunks
+> across two CDN backends: `us.aws.cdn.hf.co` (AWS) **and**
+> `us.gcp.cdn.hf.co` (GCP). The AWS chunks returned `206 Partial Content`; the
+> GCP chunks returned `403` with `x-deny-reason: host_not_allowed` (egress
+> proxy block — empty `request_id`, vs. real origin responses which carry one).
+> Net result: 0 bytes written, `model.safetensors` left `.incomplete`.
+> **Fix:** also allowlist `us.gcp.cdn.hf.co`. Both `us.*.cdn.hf.co` backends
+> are required because chunk placement is not host-stable.
 >
 > **Note:** the legacy `cdn-lfs*.hf.co` LFS hosts are also blocked here, so
 > `HF_HUB_DISABLE_XET=1` does **not** provide a working fallback in this
