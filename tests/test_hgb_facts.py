@@ -6,8 +6,17 @@ import pytest
 
 from fsx.extract.tables import LineItem, ReconstructedTable
 from fsx.hgb.concepts import ConceptMatcher
-from fsx.hgb.facts import facts_from_tables, split_period_values
+from fsx.hgb.facts import detect_statement, facts_from_tables, split_period_values
 from fsx.schemas import StatementType
+
+
+def test_detect_statement_handles_hyphenated_and_continuation():
+    assert detect_statement("Gewinn-und-Verlust-Rechnung der Commerzbank") == "guv"
+    assert detect_statement("Gewinn- und Verlustrechnung vom 1. Januar") == "guv"
+    # Multi-page balance sheet: a continuation page titled only "Aktivseite".
+    assert detect_statement("8  Commerzbank  Aktivseite  Mio €  31.12.2025") == "bilanz"
+    assert detect_statement("Passivseite  Mio €") == "bilanz"
+    assert detect_statement("Allgemeine Auftragsbedingungen") is None
 
 
 def test_split_period_values_total_row():

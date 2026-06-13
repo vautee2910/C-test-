@@ -254,6 +254,9 @@ def reconstruct_tables(
     rows = cluster_rows(words, y_tol=y_tol)
     if not rows:
         return []
+    # Re-join numbers split by a space thousands separator (e.g. bank "Mio €"
+    # reports render 20.717 as "20" + "717") before any column analysis.
+    rows = [merge_number_fragments(r) for r in rows]
     gutters = find_column_gutters(rows, min_gap=min_gap)
 
     # Collect, per panel, the list of word-segments (one per visual row).

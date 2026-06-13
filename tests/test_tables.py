@@ -115,3 +115,17 @@ def test_single_column_page_yields_one_table():
     tables = reconstruct_tables(words)
     assert len(tables) == 1
     assert tables[0].n_columns == 2
+
+
+def test_space_thousands_values_are_reconstructed():
+    # Bank "Mio €" layout: 20.717 / 22.327 rendered with a space thousands sep.
+    words = [
+        _w(50, 120, 100, "Handelsbestand"),
+        _w(462, 472, 100, "20"), _w(473, 491, 100, "717"),
+        _w(513, 523, 100, "22"), _w(524, 542, 100, "327"),
+    ]
+    tables = reconstruct_tables(words)
+    assert len(tables) == 1
+    item = tables[0].items[0]
+    assert item.label == "Handelsbestand"
+    assert item.values == [20717.0, 22327.0]

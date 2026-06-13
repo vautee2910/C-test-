@@ -13,6 +13,7 @@ the *first* non-empty current-year column therefore yields the line's own value
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -153,19 +154,22 @@ def facts_from_tables(
     return facts
 
 
-# Statement title phrases -> canonical statement key. Order matters: the more
-# specific phrases are checked first. Generic enough for any HGB report.
+# Statement title phrases -> canonical statement key. Matched after lower-casing
+# and folding hyphens/whitespace to single spaces, so "Gewinn-und-Verlust-
+# Rechnung" and "Gewinn- und Verlustrechnung" both hit. "Aktivseite"/
+# "Passivseite" catch multi-page balance sheets whose only "Bilanz" title sits on
+# an earlier page. Order: most specific first.
 _STATEMENT_TITLES = [
-    ("guv", ("gewinn- und verlustrechnung", "gewinn und verlustrechnung")),
+    ("guv", ("gewinn und verlust",)),
     ("anlagenspiegel", ("anlagenspiegel", "entwicklung des anlagevermögens")),
+    ("bilanz", ("bilanz", "aktivseite", "passivseite")),
     ("anhang", ("anhang",)),
-    ("bilanz", ("bilanz",)),
 ]
 
 
 def detect_statement(page_text: str) -> Optional[str]:
     """Infer a page's statement from its heading text, or ``None``."""
-    text = page_text.lower()
+    text = re.sub(r"[\s\-]+", " ", page_text.lower())
     for statement, phrases in _STATEMENT_TITLES:
         if any(p in text for p in phrases):
             return statement
