@@ -1,0 +1,177 @@
+"""Turn reconstructed line items into Level-2 :class:`~fsx.schemas.Fact` objects.
+
+Generalised: the period/value rule below follows the standard German nested
+column convention, not this one document.
+
+Column convention (per :mod:`fsx.extract`): figures are right-aligned and the
+**rightmost** column is always the prior year. Within the remaining (current
+year) columns, German reports place a line's own amount in the *inner* column
+and a group subtotal in the *outer* column on the group's last sub-item. Taking
+the *first* non-empty current-year column therefore yields the line's own value
+(not a group subtotal that merely shares the row).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
+
+from ..schemas import Fact, PeriodType, StatementType
+from .concepts import DEFAULT_HGB_CONCEPTS, ConceptMatcher, has_leading_enumerator
+
+_STATEMENT_MAP = {
+    "bilanz": StatementType.BILANZ,
+    "guv": StatementType.GUV,
+    "anlagenspiegel": StatementType.ANLAGENSPIEGEL,
+    "anhang": StatementType.ANHANG,
+}
+
+
+def split_period_values(values: list[Optional[float]]) -> tuple[Optional[float], Optional[float]]:
+    """Return ``(current_year, prior_year)`` from a row's column values.
+
+    Rightmost column = prior year; current year = first non-empty among the rest
+    (the line's own amount rather than a group subtotal sharing the row).
+    """
+    if not values:
+        return (None, None)
+    if len(values) == 1:
+        return (values[0], None)
+    prior = values[-1]
+    current = next((v for v in values[:-1] if v is not None), None)
+    return (current, prior)
+
+
+def facts_from_tables(
+    tables_by_page: dict[int, list],
+    *,
+    company_id: str,
+    fiscal_year: int,
+    matcher: ConceptMatcher,
+    currency: str = "EUR",
+    emit_prior_year: bool = True,
+    statement_by_page: Optional[dict[int, str]] = None,
+) -> list[Fact]:
+    """Map reconstructed tables to Facts for the current (and prior) year.
+
+    Labels that wrap across two reconstruction rows (a label-only row followed
+    by a *continuation* row) are rejoined before matching, so e.g.
+    "Kassenbestand und Guthaben bei" + "Kreditinstituten" still resolves. A row
+    starting with its own enumerator (``a) Raumkosten``) is a new sub-item, not
+    a continuation, and is never merged. ``statement_by_page`` restricts matching
+    to a page's statement to avoid cross-statement false matches.
+    """
+    statement_by_page = statement_by_page or {}
+    facts: list[Fact] = []
+    counter = 0
+    for page in sorted(tables_by_page):
+        statement = statement_by_page.get(page)
+        for ti, table in enumerate(tables_by_page[page]):
+            pending_label: Optional[str] = None
+            for item in table.items:
+                if not item.has_values:
+                    if item.label:
+                        pending_label = item.label
+                    continue
+
+                label = item.label
+                match = matcher.match(label, statement=statement)
+                if match is None and pending_label and not has_leading_enumerator(item.label):
+                    combined = f"{pending_label} {item.label}".strip()
+                    found = matcher.match(combined, statement=statement)
+                    if found is not None:
+                        match, label = found, combined
+                pending_label = None
+                if match is None:
+                    continue
+
+                current, prior = split_period_values(item.values)
+                periods = [(fiscal_year, current)]
+                if emit_prior_year:
+                    periods.append((fiscal_year - 1, prior))
+
+                for year, value in periods:
+                    if value is None:
+                        continue
+                    counter += 1
+                    facts.append(
+                        Fact(
+                            fact_id=f"{company_id}_{year}_{match.concept}_{counter}",
+                            company_id=company_id,
+                            fiscal_year=year,
+                            period_type=PeriodType.YEAR,
+                            statement=_STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN),
+                            section=match.section,
+                            line_item_original_anonymized=label,
+                            concept=match.concept,
+                            value=value,
+                            currency=currency,
+                            scale=1,
+                            sign=-1 if value < 0 else 1,
+                            source_page=page,
+                            source_table=f"P{page}_T{ti}",
+                            confidence=match.confidence,
+                        )
+                    )
+    return facts
+
+
+# Statement title phrases -> canonical statement key. Order matters: the more
+# specific phrases are checked first. Generic enough for any HGB report.
+_STATEMENT_TITLES = [
+    ("guv", ("gewinn- und verlustrechnung", "gewinn und verlustrechnung")),
+    ("anlagenspiegel", ("anlagenspiegel", "entwicklung des anlagevermögens")),
+    ("anhang", ("anhang",)),
+    ("bilanz", ("bilanz",)),
+]
+
+
+def detect_statement(page_text: str) -> Optional[str]:
+    """Infer a page's statement from its heading text, or ``None``."""
+    text = page_text.lower()
+    for statement, phrases in _STATEMENT_TITLES:
+        if any(p in text for p in phrases):
+            return statement
+    return None
+
+
+def facts_from_pdf(
+    path: str | Path,
+    *,
+    anonymizer,
+    company_id: str,
+    fiscal_year: int,
+    pages: Optional[list[int]] = None,
+    concepts_path: str | Path = DEFAULT_HGB_CONCEPTS,
+    matcher: Optional[ConceptMatcher] = None,
+) -> list[Fact]:
+    """Convenience: PDF -> reconstructed tables -> Facts, in one call.
+
+    Detects each page's statement (Bilanz / GuV / …) from its heading and uses
+    it to keep concept matching within the right statement.
+    """
+    # Lazy import keeps the HGB layer free of the fitz dependency unless used.
+    import fitz
+
+    from ..extract.pdf_words import extract_tables
+
+    if matcher is None:
+        matcher = ConceptMatcher.from_yaml(concepts_path)
+
+    statement_by_page: dict[int, str] = {}
+    with fitz.open(path) as doc:
+        for index, page in enumerate(doc, start=1):
+            if pages is not None and index not in pages:
+                continue
+            stmt = detect_statement(page.get_text("text"))
+            if stmt is not None:
+                statement_by_page[index] = stmt
+
+    tables = extract_tables(path, anonymizer=anonymizer, pages=pages)
+    return facts_from_tables(
+        tables,
+        company_id=company_id,
+        fiscal_year=fiscal_year,
+        matcher=matcher,
+        statement_by_page=statement_by_page,
+    )

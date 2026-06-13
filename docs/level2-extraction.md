@@ -19,7 +19,7 @@ HGB-Abschlüsse) oder reine generische Logik.
 | Was | Wo | Status |
 | --- | --- | --- |
 | Deutsche Zahlenformate (`1.784.101,83`, Minus vorn/hinten, Klammern) | `fsx/extract/numbers.py` | ✅ fertig |
-| HGB-Konzept-Synonyme („Sachanlagen" → `sachanlagen`, GuV-/Bilanz-Gliederung) | *kommt als geteilte Config* (`config/hgb_concepts.yaml`) | ⬜ nächster Schritt |
+| HGB-Konzept-Synonyme („Sachanlagen" → `sachanlagen`, GuV-/Bilanz-Gliederung) | `config/hgb_concepts.yaml` (committet, geteilt) | ✅ fertig |
 
 Wichtig: Die HGB-Wissensbasis ist **nicht** pro Firma — sie ist für jeden
 HGB-Jahresabschluss gleich und wird einmal gepflegt.
@@ -48,8 +48,27 @@ AKTIVA- und PASSIVA-Summe rekonstruiert zu identisch `2.740.484,63` — **die
 Bilanz geht auf.** Die Tests in `tests/test_tables.py` nutzen echte Koordinaten
 als *realistische Fixtures*, nicht als Geschäftslogik.
 
-## Was bewusst NICHT hier ist
+## Label → HGB-Konzept (fertig)
 
-Das Mapping Label → kanonisches HGB-Konzept (`Fact.concept`) braucht die
-geteilte HGB-Wissensbasis und ist der nächste Schritt — ebenfalls generalisiert,
-nicht pro Firma.
+`fsx/hgb/` bildet jede Position auf ein kanonisches Konzept ab und erzeugt
+`Fact`-Objekte (Geschäftsjahr + Vorjahr) — generalisiert, nicht pro Firma:
+
+- **Matcher** (`concepts.py`): Umlaut-Faltung, Aufzählungs-Stripping (`I.`, `1.`,
+  `a)`), dann exakt → Präfix → optional Fuzzy. Fuzzy ist **standardmäßig aus**:
+  Recall kommt aus dem Erweitern der geteilten Synonyme, nicht aus Rateterei.
+- **Statement-Kontext**: Pro Seite wird Bilanz/GuV aus der Überschrift erkannt,
+  damit eine GuV-Zeile nicht auf ein Bilanz-Konzept matcht.
+- **Spalten-Regel** (`facts.py`): rechteste Spalte = Vorjahr; laufendes Jahr =
+  erste belegte der übrigen Spalten (eigener Betrag statt Gruppensumme, die nur
+  die Zeile teilt). Umbrochene Labels werden zusammengeführt, echte Unterposten
+  (`a) …`) jedoch nicht.
+
+Am echten Beleg: **56 Facts, alle Konfidenz 1.0** (42 Bilanz + 14 GuV),
+Geschäftsjahr und Vorjahr — direkt nutzbar für den Mehrjahresvergleich.
+
+## Bekannte, bewusste Grenze
+
+GuV-Gruppensummen, die DATEV auf die Zeile des letzten Unterpostens setzt
+(z. B. Summe „sonstige betriebliche Aufwendungen"), werden derzeit nicht als
+eigener Fact erfasst — Präzision vor Vollständigkeit. Nachrüstbar, ohne die
+generische Geometrie zu ändern.

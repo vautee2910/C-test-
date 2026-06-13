@@ -1,0 +1,116 @@
+# HGB concept knowledge base — SHARED across all German annual statements.
+#
+# This is NOT per company. It maps canonical concept keys to the German line-item
+# labels (synonyms) that appear in HGB balance sheets (§266) and income
+# statements (§275, Gesamtkostenverfahren). Kanzleien word items slightly
+# differently, so the matcher folds umlauts, strips enumerators (I., 1., a)) and
+# falls back to fuzzy matching — add synonyms here as new variants are seen.
+#
+# section: aktiva | passiva | guv   (free-text, carried onto the Fact)
+
+concepts:
+  # ----------------------------- Bilanz / Aktiva ---------------------------- #
+  - {concept: anlagevermoegen, statement: bilanz, section: aktiva,
+     synonyms: ["Anlagevermögen"]}
+  - {concept: immaterielle_vermoegensgegenstaende, statement: bilanz, section: aktiva,
+     synonyms: ["Immaterielle Vermögensgegenstände", "Immaterielle Vermögensgegenstände des Anlagevermögens"]}
+  - {concept: sachanlagen, statement: bilanz, section: aktiva,
+     synonyms: ["Sachanlagen"]}
+  - {concept: finanzanlagen, statement: bilanz, section: aktiva,
+     synonyms: ["Finanzanlagen"]}
+  - {concept: summe_anlagevermoegen, statement: bilanz, section: aktiva,
+     synonyms: ["Summe Anlagevermögen"]}
+  - {concept: umlaufvermoegen, statement: bilanz, section: aktiva,
+     synonyms: ["Umlaufvermögen"]}
+  - {concept: vorraete, statement: bilanz, section: aktiva,
+     synonyms: ["Vorräte"]}
+  - {concept: roh_hilfs_betriebsstoffe, statement: bilanz, section: aktiva,
+     synonyms: ["Roh-, Hilfs- und Betriebsstoffe"]}
+  - {concept: unfertige_erzeugnisse, statement: bilanz, section: aktiva,
+     synonyms: ["unfertige Erzeugnisse, unfertige Leistungen", "unfertige Erzeugnisse und Leistungen", "unfertige Erzeugnisse"]}
+  - {concept: fertige_erzeugnisse, statement: bilanz, section: aktiva,
+     synonyms: ["fertige Erzeugnisse und Waren", "fertige Erzeugnisse"]}
+  - {concept: forderungen_lul, statement: bilanz, section: aktiva,
+     synonyms: ["Forderungen aus Lieferungen und Leistungen"]}
+  - {concept: sonstige_vermoegensgegenstaende, statement: bilanz, section: aktiva,
+     synonyms: ["sonstige Vermögensgegenstände"]}
+  - {concept: kassenbestand_bankguthaben, statement: bilanz, section: aktiva,
+     synonyms: ["Kassenbestand und Guthaben bei Kreditinstituten", "Kassenbestand, Guthaben bei Kreditinstituten", "Kassenbestand und Guthaben bei Kreditinstituten und Schecks"]}
+  - {concept: summe_umlaufvermoegen, statement: bilanz, section: aktiva,
+     synonyms: ["Summe Umlaufvermögen"]}
+  - {concept: rechnungsabgrenzungsposten_aktiv, statement: bilanz, section: aktiva,
+     synonyms: ["Rechnungsabgrenzungsposten"]}
+
+  # ----------------------------- Bilanz / Passiva --------------------------- #
+  - {concept: eigenkapital, statement: bilanz, section: passiva,
+     synonyms: ["Eigenkapital"]}
+  - {concept: gezeichnetes_kapital, statement: bilanz, section: passiva,
+     synonyms: ["Gezeichnetes Kapital", "Gezeichnetes Kapital (Stammkapital)"]}
+  - {concept: kapitalruecklage, statement: bilanz, section: passiva,
+     synonyms: ["Kapitalrücklage"]}
+  - {concept: gewinnruecklagen, statement: bilanz, section: passiva,
+     synonyms: ["Gewinnrücklagen"]}
+  - {concept: andere_gewinnruecklagen, statement: bilanz, section: passiva,
+     synonyms: ["andere Gewinnrücklagen"]}
+  - {concept: bilanzgewinn, statement: bilanz, section: passiva,
+     synonyms: ["Bilanzgewinn", "Bilanzgewinn / Bilanzverlust", "Bilanzverlust"]}
+  - {concept: jahresueberschuss, statement: bilanz, section: passiva,
+     synonyms: ["Jahresüberschuss", "Jahresüberschuss / Jahresfehlbetrag", "Jahresfehlbetrag"]}
+  - {concept: summe_eigenkapital, statement: bilanz, section: passiva,
+     synonyms: ["Summe Eigenkapital"]}
+  - {concept: rueckstellungen, statement: bilanz, section: passiva,
+     synonyms: ["Rückstellungen"]}
+  - {concept: pensionsrueckstellungen, statement: bilanz, section: passiva,
+     synonyms: ["Rückstellungen für Pensionen und ähnliche Verpflichtungen", "Rückstellungen für Pensionen"]}
+  - {concept: steuerrueckstellungen, statement: bilanz, section: passiva,
+     synonyms: ["Steuerrückstellungen"]}
+  - {concept: sonstige_rueckstellungen, statement: bilanz, section: passiva,
+     synonyms: ["sonstige Rückstellungen"]}
+  - {concept: verbindlichkeiten, statement: bilanz, section: passiva,
+     synonyms: ["Verbindlichkeiten"]}
+  - {concept: verbindlichkeiten_kreditinstitute, statement: bilanz, section: passiva,
+     synonyms: ["Verbindlichkeiten gegenüber Kreditinstituten"]}
+  - {concept: erhaltene_anzahlungen, statement: bilanz, section: passiva,
+     synonyms: ["erhaltene Anzahlungen auf Bestellungen", "erhaltene Anzahlungen"]}
+  - {concept: verbindlichkeiten_lul, statement: bilanz, section: passiva,
+     synonyms: ["Verbindlichkeiten aus Lieferungen und Leistungen"]}
+  - {concept: sonstige_verbindlichkeiten, statement: bilanz, section: passiva,
+     synonyms: ["sonstige Verbindlichkeiten"]}
+  - {concept: rechnungsabgrenzungsposten_passiv, statement: bilanz, section: passiva,
+     synonyms: ["Rechnungsabgrenzungsposten"]}
+
+  # --------------------------------- GuV ------------------------------------ #
+  - {concept: umsatzerloese, statement: guv, section: guv,
+     synonyms: ["Umsatzerlöse"]}
+  - {concept: bestandsveraenderung, statement: guv, section: guv,
+     synonyms: ["Erhöhung des Bestandes an fertigen und unfertigen Erzeugnissen", "Erhöhung oder Verminderung des Bestands an fertigen und unfertigen Erzeugnissen", "Bestandsveränderungen"]}
+  - {concept: gesamtleistung, statement: guv, section: guv,
+     synonyms: ["Gesamtleistung"]}
+  - {concept: sonstige_betriebliche_ertraege, statement: guv, section: guv,
+     synonyms: ["sonstige betriebliche Erträge"]}
+  - {concept: materialaufwand, statement: guv, section: guv,
+     synonyms: ["Materialaufwand"]}
+  - {concept: aufwand_rhb, statement: guv, section: guv,
+     synonyms: ["Aufwendungen für Roh-, Hilfs- und Betriebsstoffe und für bezogene Waren", "Aufwendungen für Roh-, Hilfs- und Betriebsstoffe"]}
+  - {concept: aufwand_bezogene_leistungen, statement: guv, section: guv,
+     synonyms: ["Aufwendungen für bezogene Leistungen"]}
+  - {concept: personalaufwand, statement: guv, section: guv,
+     synonyms: ["Personalaufwand"]}
+  - {concept: loehne_gehaelter, statement: guv, section: guv,
+     synonyms: ["Löhne und Gehälter"]}
+  - {concept: soziale_abgaben, statement: guv, section: guv,
+     synonyms: ["soziale Abgaben und Aufwendungen für Altersversorgung und für Unterstützung", "soziale Abgaben"]}
+  - {concept: abschreibungen, statement: guv, section: guv,
+     synonyms: ["Abschreibungen", "Abschreibungen auf immaterielle Vermögensgegenstände des Anlagevermögens und Sachanlagen"]}
+  - {concept: sonstige_betriebliche_aufwendungen, statement: guv, section: guv,
+     synonyms: ["sonstige betriebliche Aufwendungen"]}
+  - {concept: zinsaufwand, statement: guv, section: guv,
+     synonyms: ["Zinsen und ähnliche Aufwendungen"]}
+  - {concept: zinsertrag, statement: guv, section: guv,
+     synonyms: ["sonstige Zinsen und ähnliche Erträge"]}
+  - {concept: steuern_einkommen_ertrag, statement: guv, section: guv,
+     synonyms: ["Steuern vom Einkommen und vom Ertrag", "Steuern vom Einkommen und Ertrag"]}
+  - {concept: ergebnis_nach_steuern, statement: guv, section: guv,
+     synonyms: ["Ergebnis nach Steuern"]}
+  - {concept: sonstige_steuern, statement: guv, section: guv,
+     synonyms: ["sonstige Steuern"]}
