@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fsx.extract.tables import LineItem, ReconstructedTable
 from fsx.hgb.concepts import ConceptMatcher
 from fsx.hgb.facts import facts_from_tables, split_period_values
@@ -110,6 +112,33 @@ def test_subitem_with_enumerator_not_merged_into_header():
         statement_by_page={6: "guv"},
     )
     assert facts == []
+
+
+def test_jahresfehlbetrag_sign_is_flipped():
+    # Bilanz prints a deficit as a positive equity-reducing amount; economically
+    # it is a loss. The prior column (-492382.95) was actually a surplus.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [_table([LineItem("III. Jahresfehlbetrag", [None, None, 753840.66, -492382.95], y=1)])]}
+    facts = facts_from_tables(
+        tables, company_id="C1", fiscal_year=2021, matcher=matcher,
+        statement_by_page={5: "bilanz"},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2021)
+    prev = next(f for f in facts if f.fiscal_year == 2020)
+    assert cur.concept == "jahresueberschuss"
+    assert cur.value == pytest.approx(-753840.66)  # loss -> negative
+    assert prev.value == pytest.approx(492382.95)  # prior surplus -> positive
+
+
+def test_bilanzgewinn_not_flipped():
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [_table([LineItem("III. Bilanzgewinn", [None, 844879.12, 843667.31], y=1)])]}
+    facts = facts_from_tables(
+        tables, company_id="C1", fiscal_year=2023, matcher=matcher,
+        statement_by_page={5: "bilanz"},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2023)
+    assert cur.value == pytest.approx(844879.12)
 
 
 def test_emit_prior_year_can_be_disabled():

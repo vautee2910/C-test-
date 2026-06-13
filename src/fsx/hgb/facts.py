@@ -26,6 +26,18 @@ _STATEMENT_MAP = {
     "anhang": StatementType.ANHANG,
 }
 
+# Result concepts that can be either a surplus or a deficit. In the Bilanz a
+# deficit is printed as a *positive* equity-reducing amount (and the prior year
+# of a "Jahresfehlbetrag" row as negative when it was actually a surplus), so
+# when the line label says Fehlbetrag/Verlust the printed value's economic sign
+# is flipped to make a loss negative and a surplus positive.
+_RESULT_CONCEPTS = {"jahresueberschuss", "bilanzgewinn"}
+
+
+def _is_loss_label(label: str) -> bool:
+    low = label.lower()
+    return "fehlbetrag" in low or "verlust" in low
+
 
 def _panel_section(table, panel_index: int, statement: Optional[str], n_panels: int) -> Optional[str]:
     """Infer a Bilanz panel's section (aktiva / passiva).
@@ -111,9 +123,13 @@ def facts_from_tables(
                 if emit_prior_year:
                     periods.append((fiscal_year - 1, prior))
 
+                flip_sign = match.concept in _RESULT_CONCEPTS and _is_loss_label(label)
+
                 for year, value in periods:
                     if value is None:
                         continue
+                    if flip_sign:
+                        value = -value
                     counter += 1
                     facts.append(
                         Fact(
