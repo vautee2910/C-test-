@@ -25,6 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+import re
+
 from .numbers import is_de_number, parse_de_number
 
 
@@ -67,6 +69,37 @@ class ReconstructedTable:
     n_columns: int
     items: list[LineItem] = field(default_factory=list)
     x_range: Optional[tuple[float, float]] = None
+
+
+# Pieces of a German number split by a space acting as thousands separator:
+# a grouped integer head ("550", "1.381") followed by a 3-digit group with an
+# optional ",dd" tail and optional trailing minus ("415,00", "423,24", "96-").
+_NUM_HEAD = re.compile(r"^-?\d{1,3}(?:\.\d{3})*$")
+_NUM_TAIL = re.compile(r"^\d{3}(?:,\d+)?-?$")
+
+
+def merge_number_fragments(row: list[Word], max_gap: float = 6.0) -> list[Word]:
+    """Re-join numbers split into separate words by a space thousands separator.
+
+    Some statements (notably Anlagenspiegel exports / OCR) render ``550.415,00``
+    as two tokens ``550`` and ``415,00``. When a grouped-integer head is followed
+    within ``max_gap`` px by a 3-digit tail, they are merged back into one word.
+    Column spacing is far larger than ``max_gap``, so genuine adjacent columns
+    are never merged.
+    """
+    out: list[Word] = []
+    for w in sorted(row, key=lambda w: w.x0):
+        if (
+            out
+            and _NUM_HEAD.match(out[-1].text)
+            and _NUM_TAIL.match(w.text)
+            and (w.x0 - out[-1].x1) <= max_gap
+        ):
+            p = out.pop()
+            out.append(Word(p.x0, p.y0, w.x1, w.y1, f"{p.text}.{w.text}"))
+        else:
+            out.append(w)
+    return out
 
 
 # --------------------------------------------------------------------------- #
