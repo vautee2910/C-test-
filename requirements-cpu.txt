@@ -16,6 +16,10 @@
 # --- Document parsing / layout ---
 docling==2.102.1
 
+# --- Remote LLM gateway (OpenWebUI / OpenAI-compatible) ---
+openai
+python-dotenv
+
 # --- (uncomment as the pipeline grows) ---
 # pdfplumber
 # camelot-py[cv]
