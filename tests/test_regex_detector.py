@@ -56,6 +56,52 @@ def test_enabled_labels_filters_others_out():
     assert all(lbl == Label.EMAIL for lbl, _ in found)
 
 
+@pytest.mark.parametrize(
+    "phone",
+    [
+        "0911 1234567",
+        "+49 911 1234567",
+        "0049 911 1234567",
+        "0231/9096-0",
+        "030 12345678",
+    ],
+)
+def test_real_phone_numbers_detected(phone):
+    found = _labels(f"Tel. {phone} erreichbar")
+    assert any(lbl == Label.PHONE for lbl, _ in found), phone
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # Regression: number columns from a real DATEV Kontennachweis that the
+        # old phone regex wrongly captured (separators spanning newlines, or
+        # contiguous account numbers).
+        "Konto 023\n31 Saldo",
+        "Position 0\n1549",
+        "0690-98\n96",
+        "0\n1400",
+        "01400",
+        "Betrag 0123456789 ",
+        # Regression: thousands-grouped figures must not be eaten via the "0"
+        # that follows a thousands separator.
+        "Summe Eigenkapital 2.014.879,12",
+        "2.083.667,31",
+        "9.097.683",
+        "Betrag 0,00 EUR",
+    ],
+)
+def test_account_numbers_not_flagged_as_phone(text):
+    found = _labels(text)
+    assert not any(lbl == Label.PHONE for lbl, _ in found), text
+
+
+def test_bare_domain_not_regex_detected():
+    # "stpfl.EU" and friends must not be flagged; bare domains are dictionary-only.
+    found = _labels("Der stpfl.EU Hinweis und and.EU Text")
+    assert not any(lbl == Label.DOMAIN for lbl, _ in found)
+
+
 def test_same_iban_shares_entity_id():
     det = RegexDetector()
     spans = det.detect("DE89370400440532013000 ... DE89 3704 0044 0532 0130 00")

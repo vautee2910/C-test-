@@ -26,3 +26,6 @@ data/
 # The committed template is config/known_entities.example.yaml.
 config/known_entities.yaml
 config/*.local.yaml
+
+# Local scratch space (client test PDFs etc. — never commit)
+.scratch/

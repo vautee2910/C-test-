@@ -116,17 +116,25 @@ REGEX_RULES: list[tuple[Label, re.Pattern[str]]] = [
     (Label.EMAIL, re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")),
     # Full URL.
     (Label.URL, re.compile(r"\bhttps?://[^\s<>()\"]+", re.IGNORECASE)),
-    # German phone numbers (+49 / 0 prefix, separators, extensions).
-    (Label.PHONE, re.compile(r"(?:\+49|0)[\s/\-]?(?:\(?\d{2,5}\)?[\s/\-]?)\d{2,}(?:[\s/\-]?\d{1,6})*")),
-    # PLZ + Ort (5-digit postal code followed by a capitalised place name).
-    (Label.ADDRESS, re.compile(r"\b\d{5}\s+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+(?:\s[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+){0,2}")),
+    # German phone numbers. Deliberately strict to avoid eating the dense
+    # number columns of a financial statement: separators must NOT span line
+    # breaks (no \s/\n); the leading trunk must not sit inside a formatted
+    # number (lookbehind rejects a preceding digit, "." or "," — so the "0" in
+    # "2.014.879,12" is not a phone start); a real separator between area code
+    # and subscriber is required (rejecting contiguous account numbers like
+    # 0123456789); and the subscriber needs >=3 digits.
+    (Label.PHONE, re.compile(r"(?<![\d.,])(?:\+49|0049|0)[ ()/.\-]?\d{2,5}[ ()/.\-]+\d{3,}(?:[ ()/.\-]*\d)*")),
+    # PLZ + Ort (5-digit postal code + capitalised place name, same line only).
+    (Label.ADDRESS, re.compile(r"\b\d{5}[ ]+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+(?:[ ][A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+){0,2}")),
     # Long German date, e.g. "15. März 2024".
     (Label.DATE, re.compile(rf"\b\d{{1,2}}\.\s?(?:{MONTHS_DE})\s?\d{{4}}\b")),
     # Numeric date, e.g. 31.12.2024 (note: often a meaningful Bilanzstichtag —
     # disabled by default, see Anonymizer config).
     (Label.DATE, re.compile(r"\b\d{1,2}\.\d{1,2}\.\d{2,4}\b")),
-    # Bare domain (lower priority; full URL/email win on length).
-    (Label.DOMAIN, re.compile(r"\b(?:[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?\.)+(?:de|com|org|net|eu|at|ch|io|gmbh)\b", re.IGNORECASE)),
+    # NOTE: bare-domain detection is intentionally NOT a regex rule. In German
+    # financial prose it produces too many false positives ("stpfl.EU",
+    # "i.d.R."-style fragments). Domains worth redacting belong in the dictionary
+    # (Label.DOMAIN); structured EMAIL and full URLs are covered above.
 ]
 
 
