@@ -34,6 +34,18 @@ _STATEMENT_MAP = {
 # is flipped to make a loss negative and a surplus positive.
 _RESULT_CONCEPTS = {"jahresueberschuss", "bilanzgewinn"}
 
+# Carry-forward subtotal rows ("Übertrag") repeat a running page total where a
+# Bilanz section spills across pages. They are never a reportable line item, so
+# they must not be matched or emitted as facts.
+_CARRYFORWARD_RE = re.compile(r"übertrag", re.IGNORECASE)
+
+# Bilanz section bands. When one appears as its own row *inside* a single panel,
+# it switches the active section: some small-entity balance sheets stack AKTIVA
+# above PASSIVA in one column instead of side by side, so the panel-index
+# heuristic in :func:`_panel_section` cannot tell them apart — an explicit band
+# row in the body can.
+_SECTION_BANDS = {"aktiva": "aktiva", "passiva": "passiva"}
+
 
 def _is_loss_label(label: str) -> bool:
     low = label.lower()
@@ -115,25 +127,44 @@ def facts_from_tables(
         panels = tables_by_page[page]
         for ti, table in enumerate(panels):
             section = _panel_section(table, ti, statement, len(panels))
+            # The active section can be re-pointed mid-panel by an AKTIVA/PASSIVA
+            # band row (stacked single-column balance sheets); seed it from the
+            # panel-index heuristic.
+            current_section = section
             pending_label: Optional[str] = None
             # A matched section header without a value of its own (e.g. bank
             # "FORDERUNGEN AN KREDITINSTITUTE") whose group total appears on a
             # later, label-less subtotal row.
             pending_header: Optional[tuple] = None
             for item in table.items:
+                band = (
+                    _SECTION_BANDS.get(item.label.strip().lower().rstrip(":"))
+                    if item.label
+                    else None
+                )
+                if band is not None and not item.has_values:
+                    current_section = band
+                    pending_label = None
+                    pending_header = None
+                    continue
+                # Carry-forward subtotals ("Übertrag") are running page totals,
+                # not line items — drop them whether or not they carry a value.
+                if item.label and _CARRYFORWARD_RE.search(item.label):
+                    pending_label = None
+                    continue
                 if not item.has_values:
                     if item.label:
                         pending_label = item.label
-                        header = matcher.match(item.label, statement=statement, section=section)
+                        header = matcher.match(item.label, statement=statement, section=current_section)
                         if header is not None and header.confidence >= min_confidence:
                             pending_header = (header, item.label)
                     continue
 
                 label = item.label
-                match = matcher.match(label, statement=statement, section=section) if label else None
+                match = matcher.match(label, statement=statement, section=current_section) if label else None
                 if match is None and pending_label and label and not has_leading_enumerator(label):
                     combined = f"{pending_label} {item.label}".strip()
-                    found = matcher.match(combined, statement=statement, section=section)
+                    found = matcher.match(combined, statement=statement, section=current_section)
                     if found is not None:
                         match, label = found, combined
                 # Orphan subtotal: a value row with no usable label inherits the
@@ -198,7 +229,12 @@ _STATEMENT_TITLES = [
     ("kontennachweis", ("kontennachweis",)),
     ("guv", ("gewinn und verlust",)),
     ("anlagenspiegel", ("anlagenspiegel", "entwicklung des anlagevermögens")),
-    ("bilanz", ("bilanz", "aktivseite", "passivseite")),
+    # Many balance sheets set the AKTIVA/PASSIVA band in a *larger* font than the
+    # "Bilanz zum …" title, so the dominant-heading detector sees only the band;
+    # treat bare "aktiva"/"passiva" as a Bilanz title too. (Kontennachweis pages
+    # also carry these bands but are tagged earlier by their own keyword, so they
+    # never reach here.)
+    ("bilanz", ("bilanz", "aktivseite", "passivseite", "aktiva", "passiva")),
     ("anhang", ("anhang",)),
 ]
 

@@ -21,11 +21,23 @@ from .tables import LineItem, ReconstructedTable, Word, reconstruct_tables
 
 
 def words_from_page(page) -> list[Word]:
-    """Extract positioned :class:`Word` objects from a PyMuPDF page."""
+    """Extract positioned :class:`Word` objects from a PyMuPDF page.
+
+    Word geometry is mapped through ``page.rotation_matrix`` so coordinates are
+    in *visual reading* orientation. Landscape balance sheets are routinely bound
+    into a portrait report as ``/Rotate 90`` pages; on those PyMuPDF returns word
+    boxes in the unrotated content space, where the glyphs advance vertically, so
+    the row-clustering reconstructor would otherwise scramble the table. The
+    matrix is the identity for an upright page, so born-digital portrait
+    statements are unaffected.
+    """
+    mat = page.rotation_matrix
     words: list[Word] = []
     for x0, y0, x1, y1, text, *_ in page.get_text("words"):
         if text.strip():
-            words.append(Word(x0=x0, y0=y0, x1=x1, y1=y1, text=text))
+            r = fitz.Rect(x0, y0, x1, y1) * mat
+            r.normalize()
+            words.append(Word(x0=r.x0, y0=r.y0, x1=r.x1, y1=r.y1, text=text))
     return words
 
 

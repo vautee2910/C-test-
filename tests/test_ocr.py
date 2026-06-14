@@ -16,6 +16,7 @@ from fsx.parsing.ocr import (
     OcrError,
     OcrMyPdfBackend,
     OcrOutcome,
+    default_backend,
     ensure_searchable_pdf,
 )
 from fsx.parsing.text_layer import has_text_layer
@@ -146,6 +147,50 @@ def test_unavailable_backend_with_text_layer_is_fine(tmp_path: Path):
 
     outcome = ensure_searchable_pdf(pdf, backend=backend)
     assert outcome.ocr_applied is False
+
+
+# --------------------------------------------------------------------------- #
+# Page-selection mode: force_ocr vs skip_text (mutually exclusive in OCRmyPDF)
+# --------------------------------------------------------------------------- #
+
+
+def _capture_ocr_kwargs(monkeypatch) -> dict:
+    """Patch ``ocrmypdf.ocr`` to record its kwargs and write a stub PDF."""
+    ocrmypdf = pytest.importorskip("ocrmypdf")
+    captured: dict = {}
+
+    def fake_ocr(src, dst, **kw):
+        captured.update(kw)
+        Path(dst).write_bytes(b"%PDF-stub")
+
+    monkeypatch.setattr(ocrmypdf, "ocr", fake_ocr)
+    return captured
+
+
+def test_default_backend_forces_ocr():
+    # The default backend only runs after the gate already found no usable text
+    # layer, so it must force OCR (not skip_text) to dodge phantom text layers.
+    backend = default_backend()
+    assert isinstance(backend, OcrMyPdfBackend)
+    assert backend.force_ocr is True
+
+
+def test_force_ocr_passes_force_not_skip_text(tmp_path: Path, monkeypatch):
+    captured = _capture_ocr_kwargs(monkeypatch)
+    src = tmp_path / "in.pdf"
+    src.write_bytes(b"%PDF")
+    OcrMyPdfBackend(force_ocr=True).ocr_to_pdf(src, tmp_path / "out.pdf")
+    assert captured.get("force_ocr") is True
+    assert "skip_text" not in captured
+
+
+def test_skip_text_default_passes_skip_text_not_force(tmp_path: Path, monkeypatch):
+    captured = _capture_ocr_kwargs(monkeypatch)
+    src = tmp_path / "in.pdf"
+    src.write_bytes(b"%PDF")
+    OcrMyPdfBackend().ocr_to_pdf(src, tmp_path / "out.pdf")
+    assert captured.get("skip_text") is True
+    assert "force_ocr" not in captured
 
 
 # --------------------------------------------------------------------------- #

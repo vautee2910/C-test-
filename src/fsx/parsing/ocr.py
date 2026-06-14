@@ -67,9 +67,21 @@ class OcrMyPdfBackend:
     """OCR backend built on OCRmyPDF + Tesseract — entirely local.
 
     ``language`` is a Tesseract language spec (``"deu+eng"`` by default: German
-    statements occasionally carry English headings). ``skip_text=True`` makes
-    OCRmyPDF OCR only the pages that lack a text layer and leave existing text
-    pages byte-for-byte intact, which is the right behaviour for mixed scans.
+    statements occasionally carry English headings).
+
+    Two mutually exclusive page-selection modes (OCRmyPDF forbids combining
+    them):
+
+    * ``skip_text=True`` — OCR only the pages that *lack* a text layer and leave
+      existing-text pages byte-for-byte intact. Right for **genuinely mixed**
+      PDFs (a digital statement with a scanned cover page).
+    * ``force_ocr=True`` — rasterise and OCR **every** page, discarding any
+      existing text layer. Right once a document-level gate has already decided
+      the file is a scan: some scans carry a *phantom* text layer (a few
+      invisible / non-Unicode glyphs) that ``skip_text`` treats as "already has
+      text" and silently passes through, so those pages reach the parser with no
+      usable text. Forcing OCR avoids that data loss. ``force_ocr`` wins if both
+      are set.
     """
 
     def __init__(
@@ -77,6 +89,7 @@ class OcrMyPdfBackend:
         *,
         language: str = "deu+eng",
         skip_text: bool = True,
+        force_ocr: bool = False,
         deskew: bool = False,
         rotate_pages: bool = False,
         optimize: int = 0,
@@ -85,6 +98,7 @@ class OcrMyPdfBackend:
     ) -> None:
         self.language = language
         self.skip_text = skip_text
+        self.force_ocr = force_ocr
         self.deskew = deskew
         self.rotate_pages = rotate_pages
         self.optimize = optimize
@@ -113,17 +127,20 @@ class OcrMyPdfBackend:
             ) from exc
 
         dst.parent.mkdir(parents=True, exist_ok=True)
+        # force_ocr and skip_text are mutually exclusive in OCRmyPDF; pass only
+        # the selected one so the call never raises on a conflicting pair.
+        page_mode = {"force_ocr": True} if self.force_ocr else {"skip_text": self.skip_text}
         try:
             ocrmypdf.ocr(
                 str(src),
                 str(dst),
                 language=self.language,
-                skip_text=self.skip_text,
                 deskew=self.deskew,
                 rotate_pages=self.rotate_pages,
                 optimize=self.optimize,
                 output_type=self.output_type,
                 progress_bar=self.progress_bar,
+                **page_mode,
             )
         except Exception as exc:  # ocrmypdf raises a family of exceptions
             raise OcrError(f"OCRmyPDF failed on {src.name}: {exc}") from exc
@@ -131,8 +148,14 @@ class OcrMyPdfBackend:
 
 
 def default_backend() -> OcrBackend:
-    """Return the project's default OCR backend (OCRmyPDF/Tesseract)."""
-    return OcrMyPdfBackend()
+    """Return the project's default OCR backend (OCRmyPDF/Tesseract).
+
+    Uses ``force_ocr=True``: this backend is only ever invoked by
+    :func:`ensure_searchable_pdf` *after* the document-level gate has already
+    found no usable text layer, so re-OCRing every page is correct and dodges
+    the ``skip_text`` phantom-text-layer trap (see :class:`OcrMyPdfBackend`).
+    """
+    return OcrMyPdfBackend(force_ocr=True)
 
 
 def ensure_searchable_pdf(

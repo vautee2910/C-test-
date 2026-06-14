@@ -25,6 +25,14 @@ def test_detect_statement_handles_hyphenated_and_continuation():
     assert detect_statement("Allgemeine Auftragsbedingungen") is None
 
 
+def test_detect_statement_bare_aktiva_passiva_band_is_bilanz():
+    # Small-entity balance sheets set the AKTIVA/PASSIVA band larger than the
+    # "Bilanz zum …" title, so the dominant heading is just the band.
+    assert detect_statement("AKTIVA") == "bilanz"
+    assert detect_statement("PASSIVA  EUR  EUR") == "bilanz"
+    assert detect_statement("AKTIVA PASSIVA") == "bilanz"
+
+
 def test_detect_scale():
     assert detect_scale("Aktiva in Millionen €") == 1_000_000
     assert detect_scale("Mio. €  2025  2024") == 1_000_000
@@ -222,6 +230,42 @@ def test_grand_total_not_misattributed_to_header():
         statement_by_page={5: "bilanz"},
     )
     assert not any(f.concept == "verbindlichkeiten" for f in facts)
+
+
+def test_carryforward_uebertrag_rows_are_skipped():
+    # A balance sheet that spills across pages repeats a running "Übertrag"
+    # total; it must never be emitted as a fact (here it would otherwise mis-bind
+    # the value to the preceding Rückstellungen header).
+    matcher = ConceptMatcher.from_yaml()
+    tables = {9: [ReconstructedTable(n_columns=2, items=[
+        LineItem("1. Steuerrückstellungen", [49424.05, None], y=1),
+        LineItem("Übertrag", [None, 166044.66], y=2),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={9: "bilanz"}, has_prior_by_page={9: False},
+    )
+    assert all(f.value != 166044.66 for f in facts)
+    assert any(f.concept == "steuerrueckstellungen" for f in facts)
+
+
+def test_stacked_aktiva_passiva_band_switches_section():
+    # AKTIVA stacked above PASSIVA in one column: an explicit band row must
+    # re-point the active section so each side matches in its own context.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {9: [ReconstructedTable(n_columns=1, items=[
+        LineItem("AKTIVA", [None], y=1),
+        LineItem("II. Sachanlagen", [3264.0], y=2),
+        LineItem("PASSIVA", [None], y=3),
+        LineItem("1. Steuerrückstellungen", [49424.05], y=4),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={9: "bilanz"}, has_prior_by_page={9: False},
+    )
+    by_concept = {f.concept: f for f in facts}
+    assert by_concept["sachanlagen"].section == "aktiva"
+    assert by_concept["steuerrueckstellungen"].section == "passiva"
 
 
 def test_emit_prior_year_can_be_disabled():

@@ -35,9 +35,22 @@ sie ≥ `min_chars_per_page` (Default 16) extrahierbare Zeichen liefert; das
 Dokument „hat einen Text-Layer", wenn der Anteil solcher Seiten ≥
 `min_page_coverage` (Default 0.5) ist. Beide Schwellen sind Parameter.
 
-Gemischte Dokumente (einzelne Scan-Seiten in einer digitalen PDF) deckt OCRmyPDF
-mit `skip_text=True` ab: nur Seiten ohne Text-Layer werden ge-OCR-t, der Rest
-bleibt byte-genau erhalten.
+Das Standard-Backend (`default_backend()`) läuft mit `force_ocr=True`: es wird
+nur aufgerufen, *nachdem* das Dokument-Gate bereits „kein nutzbarer Text-Layer"
+entschieden hat, also wird jede Seite neu ge-OCR-t. Das umgeht eine reale Falle —
+manche Scans tragen auf einzelnen Seiten einen *Phantom*-Text-Layer (wenige
+unsichtbare/Nicht-Unicode-Glyphen), den `skip_text=True` als „hat schon Text"
+behandelt und still durchreicht; diese Seiten erreichen den Parser dann ohne
+verwertbaren Text (auf einem echten Test-Scan ≈ 46 % Textverlust, inkl. der GuV).
+`skip_text=True` bleibt für *echt gemischte* PDFs (Scan-Seiten in einer digitalen
+PDF) verfügbar und erhält dort die Digital-Seiten byte-genau — die beiden Modi
+schließen sich in OCRmyPDF gegenseitig aus.
+
+> Quergelesen werden Tabellen seitenweise rotationsnormalisiert: quer (Landscape)
+> in ein Hochformat-Dokument eingebundene Bilanz-/Anlagenspiegel-Seiten
+> (`/Rotate 90`) werden über `page.rotation_matrix` in Leserichtung gebracht,
+> bevor die Geometrie sie rekonstruiert. Für aufrechte Seiten ist das die
+> Identität.
 
 ### Interface
 ```python
