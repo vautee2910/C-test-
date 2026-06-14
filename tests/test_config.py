@@ -4,10 +4,34 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from fsx.anonymize.labels import Label
+from fsx.anonymize.model_detectors import SpacyNerDetector
 from fsx.config import build_anonymizer, load_anonymizer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = REPO_ROOT / "config" / "known_entities.example.yaml"
+
+
+class _FakeNlp:
+    """Minimal spaCy stand-in: locates 'Globex SE' and yields one ORG entity."""
+
+    def __call__(self, text):  # noqa: D401 - tiny fake
+        start = text.find("Globex SE")
+        ents = []
+        if start >= 0:
+            ents.append(
+                type(
+                    "Ent",
+                    (),
+                    {
+                        "text": "Globex SE",
+                        "label_": "ORG",
+                        "start_char": start,
+                        "end_char": start + len("Globex SE"),
+                    },
+                )()
+            )
+        return type("Doc", (), {"ents": ents})()
 
 
 def test_build_from_dict_groups_company_aliases():
@@ -59,6 +83,55 @@ def test_default_build_keeps_reporting_dates():
     res = eng.anonymize("Bilanz zum 31.12.2024")
     assert "31.12.2024" in res.text
     assert "[DATUM_1]" not in res.text
+
+
+def test_models_disabled_by_default_adds_no_detector():
+    # No 'models' section -> only dictionary + regex (2 detectors), and a name
+    # not in the dictionary survives because no NER layer is wired in.
+    eng = build_anonymizer({"company_aliases": ["Muster GmbH"]})
+    assert len(eng.detectors) == 2
+    res = eng.anonymize("Globex SE expandiert")
+    assert "Globex SE" in res.text
+
+
+def test_spacy_detector_wired_when_enabled():
+    captured = {}
+
+    def fake_loader(model, *, enabled_labels=None, min_length=2):
+        captured["model"] = model
+        captured["labels"] = enabled_labels
+        captured["min_length"] = min_length
+        return SpacyNerDetector(_FakeNlp(), enabled_labels=enabled_labels)
+
+    cfg = {
+        "models": {
+            "spacy": {
+                "enabled": True,
+                "model": "de_core_news_lg",
+                "labels": ["COMPANY"],
+                "min_length": 3,
+            }
+        }
+    }
+    eng = build_anonymizer(cfg, spacy_loader=fake_loader)
+
+    assert captured["model"] == "de_core_news_lg"
+    assert captured["labels"] == {Label.COMPANY}
+    assert captured["min_length"] == 3
+    assert len(eng.detectors) == 3  # dict + regex + spacy
+
+    res = eng.anonymize("Globex SE expandiert")
+    assert "[UNTERNEHMEN_1]" in res.text
+    assert "Globex SE" not in res.text
+
+
+def test_spacy_loader_not_called_when_disabled():
+    def boom(*a, **k):  # pragma: no cover - must never run
+        raise AssertionError("loader should not be called when disabled")
+
+    cfg = {"models": {"spacy": {"enabled": False}}}
+    eng = build_anonymizer(cfg, spacy_loader=boom)
+    assert len(eng.detectors) == 2
 
 
 def test_example_yaml_loads_and_anonymises():

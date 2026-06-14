@@ -26,18 +26,30 @@ Supported shape (all keys optional)::
 
     regex:
       enabled_labels: [VAT_ID, IBAN, EMAIL, ...]   # optional allowlist
+
+    models:                 # optional, off by default — statistical NER recall
+      spacy:
+        enabled: true
+        model: de_core_news_lg          # local spaCy package / cache
+        labels: [PERSON, COMPANY, LOCATION]   # optional canonical-label filter
+        min_length: 2
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import yaml
 
 from .anonymize.detectors import REGEX_RULES, DictionaryDetector, DictionaryEntity, RegexDetector
 from .anonymize.engine import Anonymizer
 from .anonymize.labels import Label
+from .anonymize.model_detectors import SpacyNerDetector
+
+# Signature of a spaCy-detector loader; injectable so config wiring is testable
+# without the ~500 MB model. Defaults to ``SpacyNerDetector.load``.
+SpacyLoader = Callable[..., Any]
 
 # Dictionary category -> (canonical label, grouped?).
 # "grouped" means all entries are aliases of ONE entity (share a token);
@@ -112,17 +124,64 @@ def _build_regex_labels(config: dict[str, Any]) -> set[Label]:
     return labels
 
 
-def build_anonymizer(config: dict[str, Any]) -> Anonymizer:
-    """Construct an :class:`Anonymizer` from a parsed config dict."""
+def _parse_labels(values: Any) -> set[Label] | None:
+    """Parse a list of canonical label names into a set, or ``None`` if absent."""
+    if not values:
+        return None
+    labels: set[Label] = set()
+    for name in values:
+        try:
+            labels.add(Label(str(name).upper()))
+        except ValueError:
+            continue
+    return labels or None
+
+
+def _build_model_detectors(
+    config: dict[str, Any],
+    *,
+    spacy_loader: SpacyLoader | None = None,
+) -> list[Any]:
+    """Build opt-in statistical NER detectors from the ``models`` config section.
+
+    Returns an empty list unless ``models.spacy.enabled`` is true. The spaCy
+    model is loaded via ``spacy_loader`` (defaults to
+    :meth:`SpacyNerDetector.load`); inject a fake to test wiring without the
+    real model. A loader error (missing package/model) propagates, since the
+    detector was explicitly requested.
+    """
+    spacy_cfg = (config.get("models") or {}).get("spacy") or {}
+    if not spacy_cfg.get("enabled", False):
+        return []
+    loader = spacy_loader if spacy_loader is not None else SpacyNerDetector.load
+    detector = loader(
+        spacy_cfg.get("model", "de_core_news_lg"),
+        enabled_labels=_parse_labels(spacy_cfg.get("labels")),
+        min_length=int(spacy_cfg.get("min_length", 2)),
+    )
+    return [detector]
+
+
+def build_anonymizer(
+    config: dict[str, Any],
+    *,
+    spacy_loader: SpacyLoader | None = None,
+) -> Anonymizer:
+    """Construct an :class:`Anonymizer` from a parsed config dict.
+
+    Model-based detectors are appended *after* the dictionary and regex layers
+    so the precise, curated layers are considered first on overlaps.
+    """
     entities = _build_entities(config)
     regex_labels = _build_regex_labels(config)
-    detectors = [
+    detectors: list[Any] = [
         DictionaryDetector(entities),
         RegexDetector(enabled_labels=regex_labels),
     ]
+    detectors.extend(_build_model_detectors(config, spacy_loader=spacy_loader))
     return Anonymizer(detectors, token_overrides=_build_token_overrides(config))
 
 
-def load_anonymizer(path: str | Path) -> Anonymizer:
+def load_anonymizer(path: str | Path, *, spacy_loader: SpacyLoader | None = None) -> Anonymizer:
     """Convenience: load a YAML config from ``path`` and build the engine."""
-    return build_anonymizer(load_config(path))
+    return build_anonymizer(load_config(path), spacy_loader=spacy_loader)

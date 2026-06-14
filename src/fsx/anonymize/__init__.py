@@ -10,6 +10,7 @@ from .detectors import (
 )
 from .engine import AnonymizationResult, Anonymizer
 from .labels import DEFAULT_TOKENS, Label
+from .model_detectors import PRIORITY_MODEL, SpacyNerDetector
 from .spans import PiiSpan, merge_spans
 
 __all__ = [
@@ -19,6 +20,8 @@ __all__ = [
     "DictionaryDetector",
     "DictionaryEntity",
     "RegexDetector",
+    "SpacyNerDetector",
+    "PRIORITY_MODEL",
     "PiiSpan",
     "merge_spans",
     "Label",
