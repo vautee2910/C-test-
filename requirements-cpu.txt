@@ -25,10 +25,16 @@ python-dotenv
 pydantic
 pyyaml
 
+# --- OCR front-stage (scanned PDFs only; see fsx/parsing/ocr.py) ---
+# Fully local: OCRmyPDF drives the Tesseract binary, no data leaves the host.
+# NOTE: the Python package needs the Tesseract engine + Ghostscript installed at
+# the OS level (not pip-installable). On Debian/Ubuntu:
+#   apt-get install -y tesseract-ocr tesseract-ocr-deu ghostscript
+ocrmypdf
+
 # --- (uncomment as the pipeline grows) ---
 # pdfplumber
 # camelot-py[cv]
-# ocrmypdf
 
 # --- Anonymisation ---
 # presidio-analyzer

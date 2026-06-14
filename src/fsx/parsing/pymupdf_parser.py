@@ -166,6 +166,50 @@ def parse_pdf(
     )
 
 
+def parse_pdf_with_ocr(
+    path: str | Path,
+    *,
+    anonymizer: Anonymizer,
+    document_id: str,
+    company_id: str,
+    fiscal_year: int,
+    source_filename: str | None = None,
+    backend: "Any | None" = None,
+    force_ocr: bool = False,
+    ocr_output_path: str | Path | None = None,
+) -> RawDocument:
+    """Parse a PDF, transparently OCR-ing it first **if** it is a scan.
+
+    A born-digital statement already has a text layer, so it is parsed directly
+    with no OCR (see :func:`fsx.parsing.ocr.ensure_searchable_pdf`). A scanned
+    statement is run through the OCR backend (OCRmyPDF/Tesseract by default) to
+    produce a searchable PDF, which is then parsed by the *same* PyMuPDF adapter
+    — the rest of the chain is unchanged.
+
+    ``source_filename`` defaults to the **original** file's name (not the
+    intermediate ``.ocr.pdf``), so provenance points at the real input.
+    """
+    # Lazy import keeps the OCRmyPDF dependency optional for callers that never
+    # touch scanned documents.
+    from .ocr import ensure_searchable_pdf
+
+    path = Path(path)
+    outcome = ensure_searchable_pdf(
+        path,
+        backend=backend,
+        output_path=ocr_output_path,
+        force=force_ocr,
+    )
+    return parse_pdf(
+        outcome.pdf_path,
+        anonymizer=anonymizer,
+        document_id=document_id,
+        company_id=company_id,
+        fiscal_year=fiscal_year,
+        source_filename=source_filename if source_filename is not None else path.name,
+    )
+
+
 def parse_pdf_with_config(
     path: str | Path,
     config_path: str | Path,
