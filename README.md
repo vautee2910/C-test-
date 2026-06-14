@@ -67,6 +67,32 @@ source .venv/bin/activate
 python scripts/docling_smoke.py path/to/statement.pdf
 ```
 
+## OCR & model-based anonymisation (optional, local)
+
+Two optional, fully local stages — see
+[docs/ocr-and-model-detectors.md](docs/ocr-and-model-detectors.md):
+
+- **OCR front-stage** for *scanned* PDFs. A born-digital statement is parsed
+  directly; a scan is transparently made searchable first (OCRmyPDF/Tesseract)
+  and then flows through the unchanged PyMuPDF adapter. Gate: *text layer
+  present → no OCR*. Needs the OS binaries plus the pip package:
+
+  ```bash
+  apt-get install -y tesseract-ocr tesseract-ocr-deu ghostscript
+  pip install ocrmypdf
+  python -c "from fsx.parsing import parse_pdf_with_ocr"   # drop-in entry point
+  ```
+
+- **Statistical NER detector** (German spaCy) as an extra anonymisation layer to
+  catch names not in the dictionary. Off by default; enable via the
+  `models.spacy` config section. Inference is local; only the model download
+  needs egress.
+
+  ```bash
+  pip install spacy
+  python -m spacy download de_core_news_lg
+  ```
+
 ## Notes on hardware
 
 Sized for the current container (4 vCPU / 16 GB RAM / 30 GB disk). Docling runs
