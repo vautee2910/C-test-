@@ -8,9 +8,23 @@ without the ~500 MB model. The real model is verified out-of-band.
 
 from __future__ import annotations
 
+import importlib.util
+
+import pytest
+
 from fsx.anonymize import Anonymizer, DictionaryDetector, DictionaryEntity, RegexDetector
 from fsx.anonymize.labels import Label
 from fsx.anonymize.model_detectors import PRIORITY_MODEL, SpacyNerDetector
+
+_SPACY_MODEL = "de_core_news_lg"
+
+
+def _spacy_model_available() -> bool:
+    if importlib.util.find_spec("spacy") is None:
+        return False
+    import spacy.util
+
+    return _SPACY_MODEL in spacy.util.get_installed_models()
 
 
 # --------------------------------------------------------------------------- #
@@ -134,3 +148,32 @@ def test_longer_model_span_wins_over_shorter_dictionary_alias():
     res = eng.anonymize("Vorstand: Dr. Max Mustermann")
     assert "Dr. Max Mustermann" not in res.text
     assert res.text == "Vorstand: [PERSON_1]"
+
+
+# --------------------------------------------------------------------------- #
+# Real model (only when de_core_news_lg is installed)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.skipif(not _spacy_model_available(), reason=f"{_SPACY_MODEL} not installed")
+def test_real_spacy_model_detects_person_org_location():
+    det = SpacyNerDetector.load(_SPACY_MODEL)
+    # Real, well-known entities the German model recognises reliably.
+    spans = det.detect("Die Siemens AG mit Sitz in München wird von Joe Kaeser geführt.")
+    by_label = {s.label: s.text for s in spans}
+    assert by_label.get(Label.COMPANY) == "Siemens AG"
+    assert by_label.get(Label.PERSON) == "Joe Kaeser"
+    assert by_label.get(Label.LOCATION) == "München"
+
+
+@pytest.mark.skipif(not _spacy_model_available(), reason=f"{_SPACY_MODEL} not installed")
+def test_real_spacy_model_lifts_recall_in_engine():
+    """End-to-end: a name absent from the dictionary is anonymised by the model."""
+    dict_det = DictionaryDetector([DictionaryEntity("c0", Label.COMPANY, ["Siemens AG"])])
+    eng = Anonymizer([dict_det, RegexDetector(), SpacyNerDetector.load(_SPACY_MODEL)])
+
+    res = eng.anonymize("Die Siemens AG wird von Joe Kaeser in München geführt.")
+    # Curated company token + model-found person/location, originals all gone.
+    assert "[UNTERNEHMEN_1]" in res.text
+    assert "Joe Kaeser" not in res.text
+    assert "München" not in res.text

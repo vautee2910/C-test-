@@ -47,3 +47,13 @@ replacement_policy:
 # (all structured German id / contact patterns except DATE).
 # regex:
 #   enabled_labels: [VAT_ID, TAX_NUMBER, COMMERCIAL_REGISTER, IBAN, EMAIL, PHONE, URL, ADDRESS]
+
+# Optional: statistical NER to catch person / org / location names that are NOT
+# in the dictionary (raises recall). Fully LOCAL — only the one-off model
+# download needs egress (see docs/network-allowlist.md). Off by default.
+# models:
+#   spacy:
+#     enabled: true
+#     model: de_core_news_lg          # install: python -m spacy download de_core_news_lg
+#     labels: [PERSON, COMPANY, LOCATION]   # optional canonical-label filter
+#     min_length: 2
