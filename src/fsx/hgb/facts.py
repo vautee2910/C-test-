@@ -18,47 +18,18 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from ..schemas import Fact, PeriodType, StatementType
+from ..schemas import Fact, PeriodType
 from .concepts import DEFAULT_CONCEPTS, ConceptMatcher, has_leading_enumerator
+from .statements import RULES
 
-_STATEMENT_MAP = {
-    "bilanz": StatementType.BILANZ,
-    "guv": StatementType.GUV,
-    "anlagenspiegel": StatementType.ANLAGENSPIEGEL,
-    "anhang": StatementType.ANHANG,
-}
-
-# Result concepts that can be either a surplus or a deficit. In the Bilanz a
-# deficit is printed as a *positive* equity-reducing amount (and the prior year
-# of a "Jahresfehlbetrag" row as negative when it was actually a surplus), so
-# when the line label says Fehlbetrag/Verlust the printed value's economic sign
-# is flipped to make a loss negative and a surplus positive.
-_RESULT_CONCEPTS = {"jahresueberschuss", "bilanzgewinn"}
-
-# Bestandsveränderung (change in inventory of finished/unfinished goods) is signed
-# by direction: a "Verminderung" (decrease) reduces the period's output and is
-# negative; an "Erhöhung" (increase) is positive. The combined HGB caption
-# "Erhöhung oder Verminderung …" is directionless, so it is left as printed.
-_BESTAND_CONCEPT = "bestandsveraenderung"
-
-
-def _is_bestand_decrease(label: str) -> bool:
-    low = label.lower()
-    if "erhöhung" in low or "erhohung" in low:
-        return False
-    return "verminderung" in low or "minderung" in low
+# Statement-title vocabulary, the key→StatementType binding, the AKTIVA/PASSIVA
+# section bands and the HGB sign rules are domain *data* in config/statements.yaml,
+# read through `RULES`; the detection/sign logic that uses them lives below.
 
 # Carry-forward subtotal rows ("Übertrag") repeat a running page total where a
 # Bilanz section spills across pages. They are never a reportable line item, so
 # they must not be matched or emitted as facts.
 _CARRYFORWARD_RE = re.compile(r"übertrag", re.IGNORECASE)
-
-# Bilanz section bands. When one appears as its own row *inside* a single panel,
-# it switches the active section: some small-entity balance sheets stack AKTIVA
-# above PASSIVA in one column instead of side by side, so the panel-index
-# heuristic in :func:`_panel_section` cannot tell them apart — an explicit band
-# row in the body can.
-_SECTION_BANDS = {"aktiva": "aktiva", "passiva": "passiva"}
 
 # A letter-enumerated sub-group header ("a) Raumkosten") vs a digit-enumerated
 # top-level position ("7. sonstige betriebliche Aufwendungen").
@@ -105,11 +76,6 @@ def _fact_id(
     )
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
     return f"{company_id}_{fiscal_year}_{concept}_{digest}"
-
-
-def _is_loss_label(label: str) -> bool:
-    low = label.lower()
-    return "fehlbetrag" in low or "verlust" in low
 
 
 def _panel_section(table, panel_index: int, statement: Optional[str], n_panels: int) -> Optional[str]:
@@ -208,7 +174,7 @@ def facts_from_tables(
             open_parent: Optional[dict] = None
             for item in table.items:
                 band = (
-                    _SECTION_BANDS.get(item.label.strip().lower().rstrip(":"))
+                    RULES.section_bands.get(item.label.strip().lower().rstrip(":"))
                     if item.label
                     else None
                 )
@@ -290,13 +256,9 @@ def facts_from_tables(
                 if emit_prior_year:
                     periods.append((fiscal_year - 1, prior))
 
-                flip_sign = (
-                    match.concept in _RESULT_CONCEPTS and _is_loss_label(label)
-                ) or (
-                    match.concept == _BESTAND_CONCEPT and _is_bestand_decrease(label)
-                )
+                flip_sign = RULES.flip_sign(match.concept, label)
 
-                statement_enum = _STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN)
+                statement_enum = RULES.statement_type(match.statement)
                 source_table = f"P{page}_T{ti}"
                 emitted_now: list[Fact] = []
                 for year, value in periods:
@@ -334,34 +296,12 @@ def facts_from_tables(
     return facts
 
 
-# Statement title phrases -> canonical statement key. Matched after lower-casing
-# and folding hyphens/whitespace to single spaces, so "Gewinn-und-Verlust-
-# Rechnung" and "Gewinn- und Verlustrechnung" both hit. "Aktivseite"/
-# "Passivseite" catch multi-page balance sheets whose only "Bilanz" title sits on
-# an earlier page. Order: most specific first.
-_STATEMENT_TITLES = [
-    # Account-level detail pages (Kontennachweis) must not be matched as a
-    # summary statement; tagging them with their own key yields no concepts.
-    ("kontennachweis", ("kontennachweis",)),
-    ("guv", ("gewinn und verlust",)),
-    ("anlagenspiegel", ("anlagenspiegel", "entwicklung des anlagevermögens")),
-    # Many balance sheets set the AKTIVA/PASSIVA band in a *larger* font than the
-    # "Bilanz zum …" title, so the dominant-heading detector sees only the band;
-    # treat bare "aktiva"/"passiva" as a Bilanz title too. (Kontennachweis pages
-    # also carry these bands but are tagged earlier by their own keyword, so they
-    # never reach here.)
-    ("bilanz", ("bilanz", "aktivseite", "passivseite", "aktiva", "passiva")),
-    ("anhang", ("anhang",)),
-]
-
-
 def detect_statement(page_text: str) -> Optional[str]:
-    """Infer a page's statement from its heading text, or ``None``."""
-    text = re.sub(r"[\s\-]+", " ", page_text.lower())
-    for statement, phrases in _STATEMENT_TITLES:
-        if any(p in text for p in phrases):
-            return statement
-    return None
+    """Infer a page's statement key from its heading text, or ``None``.
+
+    Title phrases live in ``config/statements.yaml`` (via ``RULES``).
+    """
+    return RULES.detect(page_text)
 
 
 def _dominant_heading(page) -> str:

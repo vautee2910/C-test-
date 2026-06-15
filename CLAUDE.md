@@ -76,6 +76,10 @@ End-to-end entry points (each callable one layer lower too):
   the generic hgb base), no match → `unknown` (base concepts, flagged). Add a new
   document type as YAML, no code. `concepts.classify_document_family` /
   `concept_paths_for_family` are thin wrappers over the registry.
+- `src/fsx/hgb/statements.py` + `config/statements.yaml` — statement-title
+  vocabulary (heading → statement key + `StatementType`), AKTIVA/PASSIVA section
+  bands and the HGB sign rules, all as data; `detect_statement` / sign-flip logic
+  in `facts.py` read it through `RULES`.
 - `src/fsx/hgb/facts.py` — tables → `Fact`s: statement/section context, wrapped
   & hyphenated label rejoin, prior-year column rule, sign rules
   (Jahresfehlbetrag, Bestandsveränderung), Übertrag skip, orphan subtotals,

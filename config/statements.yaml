@@ -1,0 +1,38 @@
+# Statement-heading vocabulary and HGB sign conventions — DATA shared across
+# families. The detection and sign-application *logic* that consumes this stays in
+# src/fsx/hgb/facts.py; only the German phrases and the few sign rules live here,
+# so a new statement title or sign convention is a config edit.
+
+# Heading phrase -> canonical statement key, matched after lower-casing and
+# folding hyphens/whitespace to single spaces ("Gewinn-und-Verlust-Rechnung" and
+# "Gewinn- und Verlustrechnung" both hit). ORDER MATTERS: most specific first.
+# `type` binds the key to the StatementType enum (by member name).
+statements:
+  # Account-level detail pages (Kontennachweis) must not be matched as a summary
+  # statement; their own key maps to UNKNOWN and yields no concepts.
+  - {key: kontennachweis, type: UNKNOWN,        titles: ["kontennachweis"]}
+  - {key: guv,            type: GUV,            titles: ["gewinn und verlust"]}
+  - {key: anlagenspiegel, type: ANLAGENSPIEGEL, titles: ["anlagenspiegel", "entwicklung des anlagevermögens"]}
+  # Many balance sheets set the AKTIVA/PASSIVA band in a larger font than the
+  # "Bilanz zum …" title, so the dominant-heading detector sees only the band;
+  # treat a bare "aktiva"/"passiva" as a Bilanz title too.
+  - {key: bilanz,         type: BILANZ,         titles: ["bilanz", "aktivseite", "passivseite", "aktiva", "passiva"]}
+  - {key: anhang,         type: ANHANG,         titles: ["anhang"]}
+
+# An AKTIVA/PASSIVA band appearing as its own row inside a single panel switches
+# the active section (stacked single-column balance sheets).
+section_bands:
+  aktiva: aktiva
+  passiva: passiva
+
+# A printed value's economic sign is flipped when the line is the loss variant of
+# a result concept (Jahresfehlbetrag/-verlust), or a Bestandsveränderung that is a
+# "Verminderung" (decrease). `not_when` guards the directionless combined caption
+# "Erhöhung oder Verminderung …", which is left as printed. Keywords are matched
+# in the lower-cased label; include umlaut and non-umlaut spellings.
+sign_rules:
+  - concepts: [jahresueberschuss, bilanzgewinn]
+    flip_when: [fehlbetrag, verlust]
+  - concepts: [bestandsveraenderung]
+    flip_when: [verminderung, minderung]
+    not_when: [erhöhung, erhohung]
