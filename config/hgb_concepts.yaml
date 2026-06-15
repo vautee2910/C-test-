@@ -83,7 +83,7 @@ concepts:
   - {concept: umsatzerloese, statement: guv, section: guv,
      synonyms: ["Umsatzerlöse"]}
   - {concept: bestandsveraenderung, statement: guv, section: guv,
-     synonyms: ["Erhöhung des Bestandes an fertigen und unfertigen Erzeugnissen", "Erhöhung oder Verminderung des Bestands an fertigen und unfertigen Erzeugnissen", "Bestandsveränderungen"]}
+     synonyms: ["Erhöhung des Bestandes an fertigen und unfertigen Erzeugnissen", "Verminderung des Bestandes an fertigen und unfertigen Erzeugnissen", "Erhöhung oder Verminderung des Bestands an fertigen und unfertigen Erzeugnissen", "Erhöhung oder Verminderung des Bestandes an fertigen und unfertigen Erzeugnissen", "Bestandsveränderung", "Bestandsveränderungen"]}
   - {concept: gesamtleistung, statement: guv, section: guv,
      synonyms: ["Gesamtleistung"]}
   - {concept: sonstige_betriebliche_ertraege, statement: guv, section: guv,

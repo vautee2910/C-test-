@@ -34,6 +34,19 @@ _STATEMENT_MAP = {
 # is flipped to make a loss negative and a surplus positive.
 _RESULT_CONCEPTS = {"jahresueberschuss", "bilanzgewinn"}
 
+# Bestandsveränderung (change in inventory of finished/unfinished goods) is signed
+# by direction: a "Verminderung" (decrease) reduces the period's output and is
+# negative; an "Erhöhung" (increase) is positive. The combined HGB caption
+# "Erhöhung oder Verminderung …" is directionless, so it is left as printed.
+_BESTAND_CONCEPT = "bestandsveraenderung"
+
+
+def _is_bestand_decrease(label: str) -> bool:
+    low = label.lower()
+    if "erhöhung" in low or "erhohung" in low:
+        return False
+    return "verminderung" in low or "minderung" in low
+
 # Carry-forward subtotal rows ("Übertrag") repeat a running page total where a
 # Bilanz section spills across pages. They are never a reportable line item, so
 # they must not be matched or emitted as facts.
@@ -198,7 +211,11 @@ def facts_from_tables(
                 if emit_prior_year:
                     periods.append((fiscal_year - 1, prior))
 
-                flip_sign = match.concept in _RESULT_CONCEPTS and _is_loss_label(label)
+                flip_sign = (
+                    match.concept in _RESULT_CONCEPTS and _is_loss_label(label)
+                ) or (
+                    match.concept == _BESTAND_CONCEPT and _is_bestand_decrease(label)
+                )
 
                 for year, value in periods:
                     if value is None:

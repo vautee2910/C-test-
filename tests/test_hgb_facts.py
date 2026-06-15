@@ -205,6 +205,38 @@ def test_jahresfehlbetrag_sign_is_flipped():
     assert prev.value == pytest.approx(492382.95)  # prior surplus -> positive
 
 
+def test_bestandsveraenderung_verminderung_is_negative():
+    # A "Verminderung des Bestandes" (decrease) reduces output -> negative; the
+    # group total arrives on a label-less subtotal row under the header.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [ReconstructedTable(n_columns=3, items=[
+        LineItem("Verminderung des Bestandes an fertigen und unfertigen Erzeugnissen",
+                 [None, None, None], y=1),
+        LineItem("", [476971.19, None, 27519.18], y=2),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={5: "guv"},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2024 and f.concept == "bestandsveraenderung")
+    assert cur.value == pytest.approx(-476971.19)
+
+
+def test_bestandsveraenderung_erhoehung_stays_positive():
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [ReconstructedTable(n_columns=3, items=[
+        LineItem("Erhöhung des Bestandes an fertigen und unfertigen Erzeugnissen",
+                 [None, None, None], y=1),
+        LineItem("", [12000.0, None, 8000.0], y=2),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={5: "guv"},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2024 and f.concept == "bestandsveraenderung")
+    assert cur.value == pytest.approx(12000.0)
+
+
 def test_bilanzgewinn_not_flipped():
     matcher = ConceptMatcher.from_yaml()
     tables = {5: [_table([LineItem("III. Bilanzgewinn", [None, 844879.12, 843667.31], y=1)])]}
