@@ -144,6 +144,18 @@ Done and tested:
   not one family); the host correlates it with Level-1 pages and owns the
   metadata (no persistence in core). `RawDocument` (Level 1) always keeps the
   full anonymised content regardless of Fact suppression — that is the RAG index.
+- **Level-1 tables** (`parsing/pymupdf_parser.py`) are built from the geometry
+  reconstruction (`fsx.extract`) as the *primary* source, falling back to PyMuPDF
+  `find_tables()` only when it yields nothing. `find_tables` collapses dense
+  statement / statistics tables into one text blob or misses the body entirely;
+  the reconstruction recovers the row × value-column grid, so `RawDocument.tables`
+  is queryable (SQL-grade). Only labels are anonymised — numeric values stay
+  verbatim, so no PII regex can corrupt a figure into a token.
+- **Anonymiser number integrity**: the PHONE regex carries a second lookbehind
+  `(?<!\d\s)` so a space-separated thousands continuation ("2 076 909" → "076
+  909") is not eaten as a phone number — it kept corrupting figures in
+  number-dense statistics tables. Space-separated real phones ("0911 1234567")
+  still match.
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
 - Anonymisation: dictionary + regex core, plus two optional, injectable model

@@ -4,8 +4,9 @@ This backend opens a PDF, walks every page, and extracts:
 
 * **text blocks** via ``page.get_text("blocks")`` — each block is a tuple
   ``(x0, y0, x1, y1, text, block_no, block_type)``;
-* **tables** via ``page.find_tables()`` — each found table exposes
-  ``.extract()`` (a row-major grid of ``str | None``) and ``.bbox``.
+* **tables** via the geometry reconstruction in :mod:`fsx.extract` (primary;
+  recovers the row × value-column grid of dense financial / statistics tables),
+  falling back to ``page.find_tables()`` only when reconstruction is empty.
 
 Every piece of human-readable text — block text and table cells alike — is run
 through the **same** :class:`~fsx.anonymize.engine.Anonymizer` instance so that
@@ -19,6 +20,7 @@ adapter uses the passed-in instance directly so consistency holds.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Iterable, Optional, Protocol
 
@@ -26,6 +28,28 @@ import fitz
 
 from ..anonymize.engine import Anonymizer
 from ..schemas import BBox, BlockType, Page, RawDocument, Table, TextBlock
+
+# Trailing dotted-leader artifacts of statement layouts: the run of dots between
+# a line label and its value renders (in many embedded fonts) as replacement
+# chars / control glyphs. Strip them so the cell label is a clean SQL key.
+_LEADER_RE = re.compile("[\\s. \u0008\u2008\ufffd]+$")
+
+
+def _clean_label(label: str) -> str:
+    return _LEADER_RE.sub("", label)
+
+
+def _format_value(value: Optional[float]) -> str:
+    """Render a reconstructed numeric value as a clean cell string.
+
+    Integers print without a trailing ``.0`` so a host can ``CAST`` them
+    directly; ``None`` (empty column) becomes ``""``.
+    """
+    if value is None:
+        return ""
+    if float(value).is_integer():
+        return str(int(value))
+    return repr(value)
 
 
 class _TableLike(Protocol):
@@ -94,6 +118,41 @@ class PyMuPDFParser:
             )
         return blocks
 
+    def _parse_tables_geometry(self, page: Any, page_no: int) -> list[Table]:
+        """Reconstruct tables from word geometry — the primary table source.
+
+        Uses the same geometry reconstruction as the fact pipeline
+        (:mod:`fsx.extract`), which is far more robust than PyMuPDF
+        ``find_tables()`` on dense financial / statistics tables: it recovers the
+        row × value-column grid instead of collapsing a page into one text blob
+        or missing the body entirely. Only the *labels* pass through the
+        anonymiser; numeric values stay untouched, so a downstream SQL store gets
+        the figures verbatim (no PII regex can corrupt a number into a token).
+
+        Returns ``[]`` when the page has no reconstructable rows, so the caller
+        can fall back to ``find_tables()``.
+        """
+        from ..extract.pdf_words import words_from_page
+        from ..extract.tables import reconstruct_tables
+
+        tables: list[Table] = []
+        for i, panel in enumerate(reconstruct_tables(words_from_page(page)), start=1):
+            cells: list[list[str]] = []
+            for item in panel.items:
+                label = self.anonymizer.anonymize(item.label).text if item.label else ""
+                cells.append([_clean_label(label)] + [_format_value(v) for v in item.values])
+            if not cells:
+                continue
+            tables.append(
+                Table(
+                    table_id=f"T_{page_no}_{i:02d}",
+                    caption_anonymized=None,
+                    cells=cells,
+                    bbox=None,
+                )
+            )
+        return tables
+
     def _parse_tables(self, page: Any, page_no: int) -> list[Table]:
         tables: list[Table] = []
         found = page.find_tables()
@@ -125,11 +184,16 @@ class PyMuPDFParser:
         pages: list[Page] = []
         with fitz.open(path) as doc:
             for index, page in enumerate(doc, start=1):
+                # Geometry reconstruction is the primary table source; fall back
+                # to PyMuPDF find_tables() only when it yields nothing.
+                tables = self._parse_tables_geometry(page, index) or self._parse_tables(
+                    page, index
+                )
                 pages.append(
                     Page(
                         page=index,
                         blocks=self._parse_blocks(page),
-                        tables=self._parse_tables(page, index),
+                        tables=tables,
                     )
                 )
         return RawDocument(

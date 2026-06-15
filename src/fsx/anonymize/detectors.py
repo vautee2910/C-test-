@@ -120,10 +120,12 @@ REGEX_RULES: list[tuple[Label, re.Pattern[str]]] = [
     # number columns of a financial statement: separators must NOT span line
     # breaks (no \s/\n); the leading trunk must not sit inside a formatted
     # number (lookbehind rejects a preceding digit, "." or "," — so the "0" in
-    # "2.014.879,12" is not a phone start); a real separator between area code
-    # and subscriber is required (rejecting contiguous account numbers like
-    # 0123456789); and the subscriber needs >=3 digits.
-    (Label.PHONE, re.compile(r"(?<![\d.,])(?:\+49|0049|0)[ ()/.\-]?\d{2,5}[ ()/.\-]+\d{3,}(?:[ ()/.\-]*\d)*")),
+    # "2.014.879,12" is not a phone start); the trunk must also not be a
+    # *space*-separated thousands continuation (the second lookbehind rejects a
+    # preceding "digit + whitespace", so the "076" in "2 076 909" is not a phone
+    # start); a real separator between area code and subscriber is required
+    # (rejecting contiguous account numbers like 0123456789); subscriber >=3.
+    (Label.PHONE, re.compile(r"(?<![\d.,])(?<!\d\s)(?:\+49|0049|0)[ ()/.\-]?\d{2,5}[ ()/.\-]+\d{3,}(?:[ ()/.\-]*\d)*")),
     # PLZ + Ort (5-digit postal code + capitalised place name, same line only).
     (Label.ADDRESS, re.compile(r"\b\d{5}[ ]+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+(?:[ ][A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+){0,2}")),
     # Long German date, e.g. "15. März 2024".

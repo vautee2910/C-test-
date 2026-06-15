@@ -89,6 +89,12 @@ def test_real_phone_numbers_detected(phone):
         "2.083.667,31",
         "9.097.683",
         "Betrag 0,00 EUR",
+        # Regression: space-grouped figures whose interior group starts with a
+        # "0" (statistics tables, e.g. Destatis Jahrbuch) — "2 076 909" must not
+        # have its "076 909" tail captured as a phone number.
+        "Beschäftigte 2 076 909",
+        "Anlagevermögen 1 093 098",
+        "dar. weiblich 1 048 546",
     ],
 )
 def test_account_numbers_not_flagged_as_phone(text):

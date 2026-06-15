@@ -190,6 +190,30 @@ def test_table_mapping_via_fake_table():
     assert t.cells == [["[UNTERNEHMEN_1]", ""], ["Umsatz", "1000"]]
 
 
+def test_geometry_reconstruction_is_primary_table_source(tmp_path: Path):
+    # The geometry reconstruction recovers a structured row x value-column grid
+    # (and keeps numeric values verbatim, never anonymised), so RawDocument
+    # tables are queryable — unlike find_tables() on dense statement layouts.
+    # Equal-width, right-aligned figures (as in a real statement) so the value
+    # column is detected geometrically.
+    pdf = _make_pdf(
+        tmp_path,
+        [[
+            (72, 100, "Umsatzerlöse"), (400, 100, "1.234"),
+            (72, 120, "Materialaufwand"), (400, 120, "5.678"),
+        ]],
+    )
+    raw = parse_pdf(
+        pdf, anonymizer=_make_anonymizer(),
+        document_id="D", company_id="C", fiscal_year=2023,
+    )
+    tables = raw.pages[0].tables
+    assert tables, "geometry reconstruction should produce a table"
+    rows = {r[0]: r[1:] for t in tables for r in t.cells}
+    assert rows["Umsatzerlöse"] == ["1234"]
+    assert rows["Materialaufwand"] == ["5678"]
+
+
 # --------------------------------------------------------------------------- #
 # Cross-page consistency
 # --------------------------------------------------------------------------- #
