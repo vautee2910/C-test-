@@ -95,6 +95,57 @@ def load_concepts(
     return concepts
 
 
+# Phrases that occur in German *bank* annual statements (RechKredV / Formblatt 1
+# + 2) but practically never in an industrial HGB sheet. Folded the same way as
+# labels, so umlauts/spacing do not matter. Two independent hits are required so a
+# single incidental mention (e.g. an industrial firm's "Forderungen an
+# Kreditinstitute" note) does not flip the classification.
+# Only phrases an industrial HGB sheet does NOT carry. Deliberately excludes
+# "Verbindlichkeiten gegenüber Kreditinstituten", "Zinserträge" and
+# "Zinsaufwendungen" — ordinary companies have bank loans and interest, so those
+# would misclassify an industrial statement as a bank one.
+_BANK_MARKERS = tuple(
+    normalise_label(p)
+    for p in (
+        "Barreserve",
+        "Forderungen an Kreditinstitute",
+        "Forderungen an Kunden",
+        "Verbindlichkeiten gegenüber Kunden",
+        "Fonds für allgemeine Bankrisiken",
+        "Treuhandvermögen",
+        "Schuldverschreibungen und andere festverzinsliche Wertpapiere",
+    )
+)
+
+
+def classify_document_family(text: str, *, min_markers: int = 2) -> str:
+    """Classify a document as ``"bank"`` or ``"hgb"`` from its text.
+
+    German bank statements follow RechKredV and use a distinct vocabulary
+    (Barreserve, Forderungen an Kreditinstitute, Zinserträge …). When at least
+    ``min_markers`` such markers appear the document is a bank statement;
+    otherwise it is treated as an ordinary industrial HGB statement. Used to pick
+    the right concept set so bank positions are not offered to industrial sheets
+    (and vice versa).
+    """
+    folded = normalise_label(text)
+    hits = sum(1 for m in _BANK_MARKERS if m and m in folded)
+    return "bank" if hits >= min_markers else "hgb"
+
+
+def concept_paths_for_family(family: str) -> tuple[Path, ...]:
+    """Concept YAML(s) for a document family.
+
+    Bank statements reuse the shared industrial positions (Sachanlagen,
+    Eigenkapital, Rückstellungen, Jahresüberschuss …) *and* add the bank-specific
+    ones, so they load both files; an industrial sheet loads HGB only, keeping
+    bank positions from ever matching it.
+    """
+    if family == "bank":
+        return (DEFAULT_HGB_CONCEPTS, DEFAULT_BANK_CONCEPTS)
+    return (DEFAULT_HGB_CONCEPTS,)
+
+
 class ConceptMatcher:
     """Match line-item labels to canonical HGB concepts."""
 

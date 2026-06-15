@@ -450,9 +450,7 @@ def facts_from_pdf(
     import fitz
 
     from ..extract.pdf_words import extract_tables
-
-    if matcher is None:
-        matcher = ConceptMatcher.from_yaml(concepts_path)
+    from .concepts import classify_document_family, concept_paths_for_family
 
     # Detect each page's statement from its dominant (largest-font) heading, not
     # from arbitrary text — many reports repeat a nav breadcrumb listing every
@@ -463,10 +461,12 @@ def facts_from_pdf(
     scale_by_page: dict[int, int] = {}
     prior_scale_by_page: dict[int, int] = {}
     prior_by_page: dict[int, bool] = {}
+    page_texts: list[str] = []
     current: Optional[str] = None
     with fitz.open(path) as doc:
         for index, page in enumerate(doc, start=1):
             text = page.get_text("text")
+            page_texts.append(text)
             # A Kontennachweis page overrides the heading regardless of font size
             # (its title is often smaller than the AKTIVA/PASSIVA band).
             if "kontennachweis" in text.lower():
@@ -480,6 +480,15 @@ def facts_from_pdf(
             scale_by_page[index] = cur_scale
             prior_scale_by_page[index] = prior_scale
             prior_by_page[index] = detect_has_prior_year(text, fiscal_year)
+
+    # Pick the concept set from the document family unless the caller supplied a
+    # matcher or an explicit (non-default) path. Classifying first stops bank
+    # positions being offered to an industrial sheet, and vice versa.
+    if matcher is None:
+        if concepts_path is DEFAULT_CONCEPTS:
+            family = classify_document_family("\n".join(page_texts))
+            concepts_path = concept_paths_for_family(family)
+        matcher = ConceptMatcher.from_yaml(concepts_path)
 
     tables = extract_tables(path, anonymizer=anonymizer, pages=pages)
     return facts_from_tables(

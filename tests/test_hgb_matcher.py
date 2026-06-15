@@ -88,3 +88,24 @@ def test_bank_concepts_are_loaded_alongside_industrial(matcher):
 def test_unknown_label_returns_none(matcher):
     assert matcher.match("Erläuterungen zu dieser Musterauswertung") is None
     assert matcher.match("[UNTERNEHMEN_1]") is None
+
+
+def test_classify_document_family_and_concept_paths():
+    from fsx.hgb.concepts import (
+        classify_document_family, concept_paths_for_family, DEFAULT_BANK_CONCEPTS,
+    )
+    bank = "Barreserve Forderungen an Kreditinstitute Forderungen an Kunden Zinserträge"
+    assert classify_document_family(bank) == "bank"
+    industrial = "Anlagevermögen Sachanlagen Umsatzerlöse Materialaufwand Personalaufwand"
+    assert classify_document_family(industrial) == "hgb"
+    # A single incidental marker must not flip an industrial sheet to bank.
+    assert classify_document_family("Nur Zinserträge werden hier erwähnt.") == "hgb"
+    # Industrial sheets carry bank loans and interest too — these must stay hgb.
+    industrial_loans = (
+        "Verbindlichkeiten gegenüber Kreditinstituten 250.000,00 "
+        "Zinsen und ähnliche Aufwendungen Zinsaufwendungen 12.000,00 "
+        "Umsatzerlöse Sachanlagen Rückstellungen"
+    )
+    assert classify_document_family(industrial_loans) == "hgb"
+    assert DEFAULT_BANK_CONCEPTS in concept_paths_for_family("bank")
+    assert DEFAULT_BANK_CONCEPTS not in concept_paths_for_family("hgb")

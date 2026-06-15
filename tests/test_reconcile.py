@@ -187,3 +187,33 @@ def test_low_confidence_check_can_be_disabled():
              value=100.0, confidence=0.5),
     ]
     assert reconcile_facts(facts, review_confidence=0.0) == []
+
+
+def test_family_from_facts_detects_bank():
+    from fsx.hgb.reconcile import family_from_facts
+    assert family_from_facts([_fact("umsatzerloese", 1000.0)]) == "hgb"
+    assert family_from_facts([_fact("barreserve", 100.0)]) == "bank"
+
+
+def test_bank_family_skips_hgb_balance_but_flags_dual_bilanzsumme():
+    # A bank sheet reports "Summe der Aktiva" and "Summe der Passiva" — both the
+    # bilanzsumme concept. Disagreement must be flagged (the bank balance check),
+    # while the HGB section-subtotal balance is not applied to a bank sheet.
+    facts = [
+        _fact("barreserve", 100.0, page=2),
+        _fact("bilanzsumme", 1000.0, page=2),   # Aktiva side
+        _fact("bilanzsumme", 1200.0, page=3),   # Passiva side disagrees
+    ]
+    issues = reconcile_facts(facts)
+    kinds = {i.kind for i in issues}
+    assert "conflicting_value" in kinds      # dual bilanzsumme caught
+    assert "bilanz_imbalance" not in kinds    # HGB balance skipped for banks
+
+
+def test_bank_balanced_dual_bilanzsumme_is_clean():
+    facts = [
+        _fact("barreserve", 100.0, page=2),
+        _fact("bilanzsumme", 1000.0, page=2),
+        _fact("bilanzsumme", 1000.0, page=3),
+    ]
+    assert reconcile_facts(facts) == []
