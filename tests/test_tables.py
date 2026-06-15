@@ -62,6 +62,46 @@ def test_single_gutter_detected_between_panels():
     assert 595 < gutters[0] < 645  # between AKTIVA values and PASSIVA labels
 
 
+def test_misaligned_two_up_panels_split_on_few_candidates():
+    # Real two-up balance sheets often print AKTIVA and PASSIVA with a different
+    # number of lines, so the sides drift and only a couple of rows carry the
+    # number-then-label pair across the gutter — below the consensus floor. The
+    # gutter must still be found because value columns flank it on both sides.
+    rows = cluster_rows([
+        # AKTIVA value cols end ~510/595; PASSIVA value cols end ~1059/1143.
+        # The rightmost AKTIVA value sits at ~595 consistently, so the few
+        # cross-gutter candidates cluster tightly just left of the PASSIVA labels.
+        _w(90, 240, 100, "Sachanlagen"),
+        _w(465, 510, 100, "1.784.101,83"), _w(549, 595, 100, "1.778.628,83"),
+        _w(640, 760, 100, "Eigenkapital"),
+        _w(1013, 1059, 100, "2.014.879,12"), _w(1098, 1143, 100, "2.083.667,31"),
+        # Only two rows present the AKTIVA-value -> PASSIVA-label pair (the rest
+        # are label-only on one side), so the consensus count is just 2.
+        _w(90, 240, 120, "Finanzanlagen"),
+        _w(549, 595, 120, "330.000,00"),
+        _w(640, 760, 120, "Rückstellungen"),
+        _w(90, 240, 140, "Umlaufvermögen"),
+        _w(640, 760, 140, "Verbindlichkeiten"),
+        _w(1013, 1059, 140, "900.000,00"),
+    ])
+    gutters = find_column_gutters(rows)
+    assert len(gutters) == 1
+    assert 595 < gutters[0] < 640  # between AKTIVA values and PASSIVA labels
+
+
+def test_two_value_columns_of_one_panel_are_not_split():
+    # A single panel with two right-aligned value columns: numbers flank the gap
+    # on both sides, but that gap is number-then-number (never a candidate), so
+    # it must NOT be mistaken for a panel gutter.
+    rows = cluster_rows([
+        _w(90, 240, 100, "Sachanlagen"),
+        _w(465, 510, 100, "1.784.101,83"), _w(549, 595, 100, "1.778.628,83"),
+        _w(90, 240, 120, "Finanzanlagen"),
+        _w(471, 510, 120, "330.000,00"), _w(555, 595, 120, "330.000,00"),
+    ])
+    assert find_column_gutters(rows) == []
+
+
 def test_label_to_value_gap_is_not_a_gutter():
     # A single panel: label then two right-aligned value columns. The big gap
     # between label and values must NOT be mistaken for a panel gutter.

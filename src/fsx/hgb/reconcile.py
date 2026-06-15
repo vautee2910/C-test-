@@ -1,0 +1,178 @@
+"""Reconciliation / plausibility checks over Level-2 :class:`~fsx.schemas.Fact`.
+
+Generic, document-agnostic sanity checks that surface *internal inconsistencies*
+in extracted facts — the kind OCR digit errors and mis-extraction produce — so a
+human can review them. These checks **never mutate** facts; they only report.
+
+Two families:
+
+* **Conflicting values** — the same concept for the same year extracted more than
+  once (e.g. on a detail page *and* a summary page) with materially different
+  values. The Level-3 resolver keeps the first and silently drops the rest
+  (:mod:`fsx.analysis.features`), so without this a single mis-read digit would
+  pass unnoticed (e.g. ``7.516,95`` read as ``7.316,95``).
+* **Broken accounting identities** — a reported aggregate that does not equal the
+  sum of its reported components (Bilanzsumme = Σ Anlage-/Umlaufvermögen + RAP,
+  Gesamtleistung = Umsatz + Bestandsveränderung, Personal-/Materialaufwand).
+  Evaluated only when the aggregate *and* enough components are present, so the
+  check never invents a complaint from data that simply was not extracted.
+
+All amounts are compared at their effective scale (``value * scale``) with a
+combined relative/absolute tolerance, so genuine rounding never trips a flag.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Optional
+
+from pydantic import BaseModel
+
+from ..schemas import Fact
+
+
+@dataclass(frozen=True)
+class IdentityCheck:
+    """A reported aggregate that should equal the sum of its components."""
+
+    total: str
+    components: tuple[str, ...]
+    min_components: int = 2
+
+
+# Standard HGB additive identities. Each fires only when the ``total`` concept is
+# present and at least ``min_components`` of its components are; the sum uses the
+# signed values so cost/expense signs are respected.
+DEFAULT_IDENTITIES: tuple[IdentityCheck, ...] = (
+    IdentityCheck(
+        "bilanzsumme",
+        ("summe_anlagevermoegen", "summe_umlaufvermoegen", "rechnungsabgrenzungsposten_aktiv"),
+        min_components=2,
+    ),
+    IdentityCheck("gesamtleistung", ("umsatzerloese", "bestandsveraenderung"), min_components=1),
+    IdentityCheck("personalaufwand", ("loehne_gehaelter", "soziale_abgaben"), min_components=1),
+    IdentityCheck("materialaufwand", ("aufwand_rhb", "aufwand_bezogene_leistungen"), min_components=1),
+)
+
+
+class ReconciliationIssue(BaseModel):
+    """One flagged inconsistency. Advisory — facts are never changed."""
+
+    kind: str  # "conflicting_value" | "broken_identity"
+    severity: str  # "error" | "warning"
+    company_id: str
+    fiscal_year: int
+    concept: str
+    message: str
+    values: list[float] = []
+    pages: list[int] = []
+
+
+def _effective(fact: Fact) -> float:
+    return fact.value * fact.scale
+
+
+def _differ(a: float, b: float, rel_tol: float, abs_tol: float) -> bool:
+    return abs(a - b) > max(abs_tol, rel_tol * max(abs(a), abs(b)))
+
+
+def _conflicting_values(
+    facts: list[Fact], rel_tol: float, abs_tol: float
+) -> list[ReconciliationIssue]:
+    groups: dict[tuple[str, int, str], list[Fact]] = defaultdict(list)
+    for f in facts:
+        groups[(f.company_id, f.fiscal_year, f.concept)].append(f)
+
+    issues: list[ReconciliationIssue] = []
+    for (company_id, year, concept), fs in groups.items():
+        vals = [_effective(f) for f in fs]
+        if not _differ(min(vals), max(vals), rel_tol, abs_tol):
+            continue
+        # Keep one representative value per distinct page so the message reads
+        # cleanly even when a page repeats a value.
+        seen: dict[int, float] = {}
+        for f in fs:
+            if f.source_page is not None:
+                seen.setdefault(f.source_page, _effective(f))
+        detail = ", ".join(
+            f"{v:,.2f} (p{p})" for p, v in sorted(seen.items())
+        ) or ", ".join(f"{v:,.2f}" for v in vals)
+        issues.append(
+            ReconciliationIssue(
+                kind="conflicting_value",
+                severity="error",
+                company_id=company_id,
+                fiscal_year=year,
+                concept=concept,
+                message=f"{concept} ({year}) extracted with conflicting values: {detail}",
+                values=sorted({round(v, 2) for v in vals}),
+                pages=sorted(seen),
+            )
+        )
+    return issues
+
+
+def _broken_identities(
+    facts: list[Fact],
+    identities: tuple[IdentityCheck, ...],
+    rel_tol: float,
+    abs_tol: float,
+) -> list[ReconciliationIssue]:
+    # company -> year -> concept -> (value, page); first fact wins, matching the
+    # Level-3 resolver so the check sees the same numbers analysis would use.
+    by: dict[tuple[str, int], dict[str, tuple[float, Optional[int]]]] = defaultdict(dict)
+    for f in facts:
+        by[(f.company_id, f.fiscal_year)].setdefault(f.concept, (_effective(f), f.source_page))
+
+    issues: list[ReconciliationIssue] = []
+    for (company_id, year), values in by.items():
+        for ident in identities:
+            if ident.total not in values:
+                continue
+            present = [c for c in ident.components if c in values]
+            if len(present) < ident.min_components:
+                continue
+            total = values[ident.total][0]
+            computed = sum(values[c][0] for c in present)
+            if not _differ(total, computed, rel_tol, abs_tol):
+                continue
+            pages = sorted(
+                {values[c][1] for c in [ident.total, *present] if values[c][1] is not None}
+            )
+            issues.append(
+                ReconciliationIssue(
+                    kind="broken_identity",
+                    severity="warning",
+                    company_id=company_id,
+                    fiscal_year=year,
+                    concept=ident.total,
+                    message=(
+                        f"{ident.total} ({year}) = {total:,.2f} does not match "
+                        f"{' + '.join(present)} = {computed:,.2f}"
+                    ),
+                    values=[round(total, 2), round(computed, 2)],
+                    pages=pages,
+                )
+            )
+    return issues
+
+
+def reconcile_facts(
+    facts: list[Fact],
+    *,
+    rel_tol: float = 0.005,
+    abs_tol: float = 1.0,
+    identities: tuple[IdentityCheck, ...] = DEFAULT_IDENTITIES,
+) -> list[ReconciliationIssue]:
+    """Return inconsistencies found across a company's extracted Facts.
+
+    ``rel_tol`` / ``abs_tol`` set the match tolerance (an amount differs only if
+    it is off by more than both ``abs_tol`` and ``rel_tol`` of the larger value).
+    The result is empty when everything reconciles. Ordered errors-first, then by
+    year and concept for stable output.
+    """
+    issues = _conflicting_values(facts, rel_tol, abs_tol)
+    issues += _broken_identities(facts, identities, rel_tol, abs_tol)
+    issues.sort(key=lambda i: (i.severity != "error", i.fiscal_year, i.concept))
+    return issues

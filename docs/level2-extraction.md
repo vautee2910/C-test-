@@ -29,11 +29,19 @@ HGB-Jahresabschluss gleich und wird einmal gepflegt.
 `fsx/extract/tables.py` rekonstruiert aus Wort-Koordinaten Zeilen/Spalten —
 ohne eine einzige seitenspezifische Zahl:
 
+- **Rotation**: Wort-Boxen werden über `page.rotation_matrix` in Leserichtung
+  gebracht (`words_from_page`), bevor irgendetwas geclustert wird — quer
+  eingebundene Bilanz-Seiten (`/Rotate 90`) würden sonst zerfallen. Für aufrechte
+  Seiten ist das die Identität.
 - **Zeilen** per vertikalem Clustering (`cluster_rows`).
 - **Panels** (AKTIVA | PASSIVA) per Konsens-Rinne (`find_column_gutters`): eine
   echte Rinne hat *links eine Zahl* (Ende der Wertspalte) und *rechts Text*
   (nächstes Label) — so wird sie von einer normalen Label→Wert-Lücke
   unterschieden, und einspaltige Seiten werden nie fälschlich gesplittet.
+  Driften die beiden Seiten vertikal (unterschiedlich viele Zeilen), gibt es zu
+  wenige Treffer für den Konsens; dann genügt ein kleinerer Treffer-Cluster,
+  *sofern Wertspalten ihn auf beiden Seiten flankieren* — diese Zwei-Gruppen-
+  Struktur tritt nur zwischen echten Panels auf, nie innerhalb einer Spalte.
 - **Spalten** per Clustering der rechten Kanten der Zahlen (`detect_value_columns`),
   weil Beträge rechtsbündig stehen.
 
@@ -65,6 +73,28 @@ als *realistische Fixtures*, nicht als Geschäftslogik.
 
 Am echten Beleg: **56 Facts, alle Konfidenz 1.0** (42 Bilanz + 14 GuV),
 Geschäftsjahr und Vorjahr — direkt nutzbar für den Mehrjahresvergleich.
+
+## Plausibilitätsprüfung (`reconcile.py`)
+
+`fsx.hgb.reconcile.reconcile_facts(facts)` prüft die erzeugten Facts auf
+*innere Widersprüche* — genau das, was OCR-Ziffernfehler und Fehl-Extraktion
+hinterlassen — und meldet sie, **ohne** je einen Fact zu verändern:
+
+- **Widersprüchliche Werte**: dasselbe Konzept/Jahr mehrfach extrahiert (z. B.
+  Detail- *und* Summenseite) mit abweichendem Betrag. Die Level-3-Auflösung
+  behält still den ersten — ohne diese Prüfung bliebe ein verlesener Ziffer
+  (`7.516,95` → `7.316,95`) unbemerkt. Severity `error`.
+- **Gebrochene Bilanz-/GuV-Identitäten**: eine gemeldete Summe, die nicht der
+  Summe ihrer gemeldeten Komponenten entspricht (Bilanzsumme = Σ Anlage-/
+  Umlaufvermögen + RAP, Gesamtleistung = Umsatz + Bestandsveränderung, Personal-/
+  Materialaufwand). Wird nur geprüft, wenn Summe *und* genug Komponenten
+  vorliegen, erfindet also nie eine Beanstandung aus fehlenden Daten. Severity
+  `warning`.
+
+Verglichen wird am effektiven Betrag (`value * scale`) mit kombinierter
+relativer/absoluter Toleranz, damit echte Rundung nie auslöst. Am realen Scan
+fand die Prüfung eine tatsächliche Fehl-Extraktion (Gesamtleistung `731.476,36`
+≠ Umsatz `1.208.447,55`), am sauberen Digital-Abschluss null Befunde.
 
 ## Bekannte, bewusste Grenze
 

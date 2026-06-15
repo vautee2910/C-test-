@@ -11,6 +11,12 @@ from .concepts import (
     normalise_label,
 )
 from .facts import facts_from_pdf, facts_from_tables, split_period_values
+from .reconcile import (
+    DEFAULT_IDENTITIES,
+    IdentityCheck,
+    ReconciliationIssue,
+    reconcile_facts,
+)
 
 __all__ = [
     "DEFAULT_HGB_CONCEPTS",
@@ -22,4 +28,8 @@ __all__ = [
     "facts_from_tables",
     "facts_from_pdf",
     "split_period_values",
+    "DEFAULT_IDENTITIES",
+    "IdentityCheck",
+    "ReconciliationIssue",
+    "reconcile_facts",
 ]

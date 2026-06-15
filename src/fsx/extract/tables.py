@@ -160,6 +160,7 @@ def find_column_gutters(
     min_support: float = 0.1,
     min_support_count: int = 3,
     cluster_tol: float = 20.0,
+    min_panel_support: int = 2,
 ) -> list[float]:
     """Find x-positions of vertical gutters separating side-by-side panels.
 
@@ -174,6 +175,17 @@ def find_column_gutters(
     a couple of stray gaps invent one. The absolute floor matters because many
     rows (totals, headers) are legitimately single-panel and never cross the
     gutter, so a pure fraction-of-all-rows threshold would be too strict.
+
+    Real two-up balance sheets often print AKTIVA and PASSIVA with a *different*
+    number of lines, so the two sides drift vertically and few rows carry the
+    number-then-label pair at the same x — the consensus floor would then miss
+    an obvious gutter. As a fallback, a smaller cluster (``min_panel_support``)
+    is still accepted when it is *flanked by value columns on both sides* (a
+    number right-aligned to its left **and** a number starting to its right):
+    that two-group-of-figures structure only occurs between genuine panels, not
+    within a single column, so it cannot split a label from its values nor two
+    value columns of one panel (whose gap is number-then-number, never a
+    candidate).
     """
     if not rows:
         return []
@@ -197,8 +209,22 @@ def find_column_gutters(
         else:
             clusters.append([c])
 
+    # Right edges / left edges of every numeric word, to confirm that a weak
+    # cluster sits between two genuine columns of figures.
+    num_edges = [w.x1 for row in rows for w in row if is_de_number(w.text)]
+    num_starts = [w.x0 for row in rows for w in row if is_de_number(w.text)]
+
     threshold = max(min_support_count, int(min_support * len(rows)))
-    gutters = [sum(cl) / len(cl) for cl in clusters if len(cl) >= threshold]
+    gutters: list[float] = []
+    for cl in clusters:
+        centre = sum(cl) / len(cl)
+        if len(cl) >= threshold:
+            gutters.append(centre)
+        elif len(cl) >= min_panel_support:
+            flanked_left = any(e <= centre - min_gap for e in num_edges)
+            flanked_right = any(s >= centre + min_gap for s in num_starts)
+            if flanked_left and flanked_right:
+                gutters.append(centre)
     return sorted(gutters)
 
 
