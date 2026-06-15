@@ -316,6 +316,46 @@ def test_stacked_aktiva_passiva_band_switches_section():
     assert by_concept["steuerrueckstellungen"].section == "passiva"
 
 
+def test_multi_subgroup_parent_subtotal_is_suppressed():
+    # "7. sonstige betriebliche Aufwendungen" is split into a) Raumkosten,
+    # b) Versicherungen, ... each with its own subtotal and no printed grand
+    # total. The first sub-group's subtotal must NOT be emitted as the parent.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {16: [ReconstructedTable(n_columns=3, items=[
+        LineItem("7. sonstige betriebliche Aufwendungen", [None, None, None], y=1),
+        LineItem("a) Raumkosten", [None, None, None], y=2),
+        LineItem("4210 Miete", [15922.5, None, 11910.0], y=3),
+        LineItem("", [20991.84, None, 15704.19], y=4),
+        LineItem("b) Versicherungen, Beiträge und Abgaben", [None, None, None], y=5),
+        LineItem("4360 Versicherungen", [2582.18, None, 1998.24], y=6),
+        LineItem("", [16800.25, None, 7929.92], y=7),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={16: "guv"},
+    )
+    assert all(f.concept != "sonstige_betriebliche_aufwendungen" for f in facts)
+
+
+def test_single_subgroup_parent_subtotal_is_kept():
+    # "6. Abschreibungen" has a single sub-group a) -> its subtotal IS the total.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {16: [ReconstructedTable(n_columns=3, items=[
+        LineItem("6. Abschreibungen", [None, None, None], y=1),
+        LineItem("a) auf immaterielle Vermögensgegenstände des", [None, None, None], y=2),
+        LineItem("Anlagevermögens und Sachanlagen", [None, None, None], y=3),
+        LineItem("4830 Abschreibungen auf Sachanlagen", [3682.99, None, 9491.48], y=4),
+        LineItem("", [7516.95, None, 9857.48], y=5),
+        LineItem("7. sonstige betriebliche Aufwendungen", [None, None, None], y=6),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={16: "guv"},
+    )
+    cur = next(f for f in facts if f.concept == "abschreibungen" and f.fiscal_year == 2024)
+    assert cur.value == pytest.approx(7516.95)
+
+
 def test_emit_prior_year_can_be_disabled():
     matcher = ConceptMatcher.from_yaml()
     tables = {6: [_table([LineItem("1. Umsatzerlöse", [None, 2092019.57, 2175554.06], y=1)])]}

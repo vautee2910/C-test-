@@ -59,6 +59,26 @@ _CARRYFORWARD_RE = re.compile(r"übertrag", re.IGNORECASE)
 # row in the body can.
 _SECTION_BANDS = {"aktiva": "aktiva", "passiva": "passiva"}
 
+# A letter-enumerated sub-group header ("a) Raumkosten") vs a digit-enumerated
+# top-level position ("7. sonstige betriebliche Aufwendungen").
+_SUBGROUP_ENUM = re.compile(r"^\s*[a-z][.)]\s", re.IGNORECASE)
+_TOPLEVEL_ENUM = re.compile(r"^\s*\d+[.)]\s")
+
+
+def _is_anon_subgroup_header(
+    label: str, matcher: ConceptMatcher, statement, section, min_confidence: float
+) -> bool:
+    """A letter-enumerated header that maps to no concept (e.g. "a) Raumkosten").
+
+    These split a parent position (e.g. "sonstige betriebliche Aufwendungen")
+    into sub-groups, each with its own subtotal; the parent itself is the *sum*
+    of those subtotals, so a single sub-group's subtotal is not the parent total.
+    """
+    if not _SUBGROUP_ENUM.match(label.strip() + " "):
+        return False
+    m = matcher.match(label, statement=statement, section=section)
+    return m is None or m.confidence < min_confidence
+
 
 def _is_loss_label(label: str) -> bool:
     low = label.lower()
@@ -149,6 +169,9 @@ def facts_from_tables(
             # "FORDERUNGEN AN KREDITINSTITUTE") whose group total appears on a
             # later, label-less subtotal row.
             pending_header: Optional[tuple] = None
+            # Tracks a parent position split into anonymous letter sub-groups so a
+            # single sub-group's subtotal is not mistaken for the parent total.
+            open_parent: Optional[dict] = None
             for item in table.items:
                 band = (
                     _SECTION_BANDS.get(item.label.strip().lower().rstrip(":"))
@@ -159,6 +182,7 @@ def facts_from_tables(
                     current_section = band
                     pending_label = None
                     pending_header = None
+                    open_parent = None
                     continue
                 # Carry-forward subtotals ("Übertrag") are running page totals,
                 # not line items — drop them whether or not they carry a value.
@@ -168,9 +192,30 @@ def facts_from_tables(
                 if not item.has_values:
                     if item.label:
                         pending_label = item.label
+                        if _is_anon_subgroup_header(
+                            item.label, matcher, statement, current_section, min_confidence
+                        ):
+                            if open_parent is not None:
+                                open_parent["n"] += 1
+                                # A second sub-group proves the first subtotal was
+                                # not the parent total: drop it (precision first —
+                                # a reliable parent sum needs clean, ungarbled OCR).
+                                if open_parent["n"] >= 2 and open_parent["facts"]:
+                                    for f in open_parent["facts"]:
+                                        if f in facts:
+                                            facts.remove(f)
+                                    open_parent["facts"] = []
+                            elif pending_header is not None:
+                                open_parent = {"concept": pending_header[0].concept,
+                                               "n": 1, "facts": []}
+                            continue
                         header = matcher.match(item.label, statement=statement, section=current_section)
                         if header is not None and header.confidence >= min_confidence:
                             pending_header = (header, item.label)
+                        # A real concept header or a new top-level position closes
+                        # the previous parent's sub-group accumulation.
+                        if header is not None or _TOPLEVEL_ENUM.match(item.label.strip() + " "):
+                            open_parent = None
                     continue
 
                 label = item.label
@@ -217,31 +262,37 @@ def facts_from_tables(
                     match.concept == _BESTAND_CONCEPT and _is_bestand_decrease(label)
                 )
 
+                emitted_now: list[Fact] = []
                 for year, value in periods:
                     if value is None:
                         continue
                     if flip_sign:
                         value = -value
                     counter += 1
-                    facts.append(
-                        Fact(
-                            fact_id=f"{company_id}_{year}_{match.concept}_{counter}",
-                            company_id=company_id,
-                            fiscal_year=year,
-                            period_type=PeriodType.YEAR,
-                            statement=_STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN),
-                            section=match.section,
-                            line_item_original_anonymized=label,
-                            concept=match.concept,
-                            value=value,
-                            currency=currency,
-                            scale=scale,
-                            sign=-1 if value < 0 else 1,
-                            source_page=page,
-                            source_table=f"P{page}_T{ti}",
-                            confidence=match.confidence,
-                        )
+                    fact = Fact(
+                        fact_id=f"{company_id}_{year}_{match.concept}_{counter}",
+                        company_id=company_id,
+                        fiscal_year=year,
+                        period_type=PeriodType.YEAR,
+                        statement=_STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN),
+                        section=match.section,
+                        line_item_original_anonymized=label,
+                        concept=match.concept,
+                        value=value,
+                        currency=currency,
+                        scale=scale,
+                        sign=-1 if value < 0 else 1,
+                        source_page=page,
+                        source_table=f"P{page}_T{ti}",
+                        confidence=match.confidence,
                     )
+                    facts.append(fact)
+                    emitted_now.append(fact)
+                # Remember an orphan subtotal that belongs to an open parent so it
+                # can be retracted if it turns out to be only one of several
+                # sub-groups (see the second-sub-group handling above).
+                if orphan and open_parent is not None and match.concept == open_parent["concept"]:
+                    open_parent["facts"].extend(emitted_now)
     return facts
 
 
