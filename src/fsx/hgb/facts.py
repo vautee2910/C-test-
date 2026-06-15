@@ -163,10 +163,20 @@ def facts_from_tables(
                 label = item.label
                 match = matcher.match(label, statement=statement, section=current_section) if label else None
                 if match is None and pending_label and label and not has_leading_enumerator(label):
-                    combined = f"{pending_label} {item.label}".strip()
-                    found = matcher.match(combined, statement=statement, section=current_section)
-                    if found is not None:
-                        match, label = found, combined
+                    # Rejoin a wrapped label. German breaks a word with a trailing
+                    # hyphen ("... Leis-" / "tungen" -> "Leistungen"), so try the
+                    # de-hyphenated join first, then the plain space join; keep the
+                    # first that resolves to a concept.
+                    pl = pending_label.rstrip()
+                    candidates = []
+                    if pl.endswith(("-", "‐", "‑")):
+                        candidates.append(pl[:-1] + item.label.lstrip())
+                    candidates.append(f"{pending_label} {item.label}".strip())
+                    for combined in candidates:
+                        found = matcher.match(combined, statement=statement, section=current_section)
+                        if found is not None:
+                            match, label = found, combined
+                            break
                 # Orphan subtotal: a value row with no usable label inherits the
                 # pending section header (the group total it belongs to).
                 orphan = False

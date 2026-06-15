@@ -135,6 +135,22 @@ def test_wrapped_label_merged_for_matching():
     assert cur.value == 206908.14
 
 
+def test_hyphenated_wrapped_label_is_dehyphenated():
+    # German line break: "... Leis-" / "tungen" must rejoin to "Leistungen".
+    matcher = ConceptMatcher.from_yaml()
+    tables = {9: [_table([
+        LineItem("1. Forderungen aus Lieferungen und Leis-", [None, None, None], y=1),
+        LineItem("tungen", [130694.29, None, None], y=2),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2024, matcher=matcher,
+        statement_by_page={9: "bilanz"}, has_prior_by_page={9: False},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2024)
+    assert cur.concept == "forderungen_lul"
+    assert cur.value == 130694.29
+
+
 def test_unmatched_rows_produce_no_facts():
     matcher = ConceptMatcher.from_yaml()
     tables = {1: [_table([LineItem("Erläuterungen zur Musterauswertung", [None, 1.0, 2.0], y=1)])]}
