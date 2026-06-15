@@ -31,6 +31,15 @@ from .statements import RULES
 # they must not be matched or emitted as facts.
 _CARRYFORWARD_RE = re.compile(r"übertrag", re.IGNORECASE)
 
+# A single Jahresabschluss line carries at most the current year, the prior year
+# and (rarely) a change column — never more. A panel with this many or more value
+# columns is therefore not a statement but a cross-sectional / multi-year
+# statistics matrix (e.g. a Destatis Jahrbuch table broken down by
+# Wirtschaftsbereich, or a multi-year time series). There is no reliable way to
+# tell which column is "the" value, so per the precision-over-recall rule we
+# suppress the whole panel rather than emit an arbitrary column as a fact.
+_MAX_STATEMENT_VALUE_COLUMNS = 4
+
 # A letter-enumerated sub-group header ("a) Raumkosten") vs a digit-enumerated
 # top-level position ("7. sonstige betriebliche Aufwendungen").
 _SUBGROUP_ENUM = re.compile(r"^\s*[a-z][.)]\s", re.IGNORECASE)
@@ -159,6 +168,12 @@ def facts_from_tables(
         has_prior = has_prior_by_page.get(page, True)
         panels = tables_by_page[page]
         for ti, table in enumerate(panels):
+            # Skip cross-sectional / multi-year statistics matrices: a real
+            # statement line has at most current + prior (+ change) columns, so a
+            # wider panel offers no unambiguous "value" column. Suppress rather
+            # than emit an arbitrary column (precision over recall).
+            if table.n_columns >= _MAX_STATEMENT_VALUE_COLUMNS:
+                continue
             section = _panel_section(table, ti, statement, len(panels))
             # The active section can be re-pointed mid-panel by an AKTIVA/PASSIVA
             # band row (stacked single-column balance sheets); seed it from the

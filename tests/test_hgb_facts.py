@@ -433,3 +433,30 @@ def test_emit_prior_year_can_be_disabled():
     )
     assert len(facts) == 1
     assert facts[0].fiscal_year == 2023
+
+
+def test_wide_statistics_matrix_panel_is_suppressed():
+    # A cross-sectional statistics matrix (e.g. a Destatis Jahrbuch table broken
+    # down by Wirtschaftsbereich) has many value columns and no current/prior
+    # period structure. There is no unambiguous "value" column, so the whole
+    # panel must be suppressed rather than emitting an arbitrary column as a fact
+    # (precision over recall). Mirrors the real 6-column Jahrbuch chapter 9.4.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {278: [ReconstructedTable(n_columns=6, items=[
+        LineItem("Anlagevermögen", [1093098.0, 162152.0, 41408.0, 72398.0, 122269.0, 153421.0], y=1),
+        LineItem("Sachanlagen", [559232.0, 153001.0, 37486.0, 69314.0, 65913.0, 28351.0], y=2),
+        LineItem("Umsatzerlöse", [440021.0, 28500.0, 9652.0, 10675.0, 157505.0, 17601.0], y=3),
+    ])]}
+    facts = facts_from_tables(tables, company_id="JB", fiscal_year=2019, matcher=matcher)
+    assert facts == []
+
+
+def test_three_column_statement_panel_still_emits():
+    # A guard at >= 4 value columns must not touch ordinary statements, including
+    # a current/prior/change three-column layout — those remain extractable.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [ReconstructedTable(n_columns=3, items=[
+        LineItem("II. Sachanlagen", [None, 1784101.83, 1778628.83], y=1),
+    ])]}
+    facts = facts_from_tables(tables, company_id="C1", fiscal_year=2023, matcher=matcher)
+    assert {f.concept for f in facts} == {"sachanlagen"}
