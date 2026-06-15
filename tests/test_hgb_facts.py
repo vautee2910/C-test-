@@ -356,6 +356,34 @@ def test_single_subgroup_parent_subtotal_is_kept():
     assert cur.value == pytest.approx(7516.95)
 
 
+def test_fact_ids_are_deterministic_and_unique():
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [_table([
+        LineItem("II. Sachanlagen", [None, 1784101.83, 1778628.83], y=1),
+        LineItem("III. Finanzanlagen", [None, 39487.0, 39593.0], y=2),
+    ])]}
+    a = facts_from_tables(tables, company_id="C1", fiscal_year=2023, matcher=matcher)
+    b = facts_from_tables(tables, company_id="C1", fiscal_year=2023, matcher=matcher)
+    # Re-running the same input yields byte-identical ids (no run-order counter).
+    assert [f.fact_id for f in a] == [f.fact_id for f in b]
+    # Distinct facts have distinct ids.
+    assert len({f.fact_id for f in a}) == len(a)
+
+
+def test_fact_id_is_stable_when_only_the_value_changes():
+    # A re-extraction that corrects a digit keeps the same id, so the host engine
+    # upserts (updates) the row instead of inserting a duplicate.
+    matcher = ConceptMatcher.from_yaml()
+    t1 = {5: [_table([LineItem("II. Sachanlagen", [None, 1784101.83, 1778628.83], y=1)])]}
+    t2 = {5: [_table([LineItem("II. Sachanlagen", [None, 1784101.99, 1778628.83], y=1)])]}
+    cur1 = next(f for f in facts_from_tables(t1, company_id="C1", fiscal_year=2023, matcher=matcher)
+                if f.fiscal_year == 2023)
+    cur2 = next(f for f in facts_from_tables(t2, company_id="C1", fiscal_year=2023, matcher=matcher)
+                if f.fiscal_year == 2023)
+    assert cur1.fact_id == cur2.fact_id
+    assert cur1.value != cur2.value
+
+
 def test_emit_prior_year_can_be_disabled():
     matcher = ConceptMatcher.from_yaml()
     tables = {6: [_table([LineItem("1. Umsatzerlöse", [None, 2092019.57, 2175554.06], y=1)])]}

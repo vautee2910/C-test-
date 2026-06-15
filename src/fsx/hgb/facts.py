@@ -13,6 +13,7 @@ the *first* non-empty current-year column therefore yields the line's own value
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Optional
@@ -78,6 +79,32 @@ def _is_anon_subgroup_header(
         return False
     m = matcher.match(label, statement=statement, section=section)
     return m is None or m.confidence < min_confidence
+
+
+def _fact_id(
+    company_id: str,
+    fiscal_year: int,
+    concept: str,
+    statement: str,
+    section: Optional[str],
+    source_table: Optional[str],
+    label: Optional[str],
+) -> str:
+    """A deterministic, content-based fact id for idempotent downstream upserts.
+
+    The id is a function of the fact's *logical identity* — company, year,
+    statement, section, concept, the source table and the line label — but **not**
+    its value, so a re-run that corrects a number keeps the same id (an update,
+    not a duplicate). A short hash keeps it unique while the readable prefix stays
+    skimmable. Persistence itself stays out of this package (the host engine owns
+    the database); this only makes its key stable.
+    """
+    raw = "|".join(
+        [company_id, str(fiscal_year), statement, section or "", concept,
+         source_table or "", label or ""]
+    )
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
+    return f"{company_id}_{fiscal_year}_{concept}_{digest}"
 
 
 def _is_loss_label(label: str) -> bool:
@@ -152,7 +179,6 @@ def facts_from_tables(
     scale_by_page = scale_by_page or {}
     has_prior_by_page = has_prior_by_page or {}
     facts: list[Fact] = []
-    counter = 0
     for page in sorted(tables_by_page):
         statement = statement_by_page.get(page)
         scale = scale_by_page.get(page, 1)
@@ -262,19 +288,23 @@ def facts_from_tables(
                     match.concept == _BESTAND_CONCEPT and _is_bestand_decrease(label)
                 )
 
+                statement_enum = _STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN)
+                source_table = f"P{page}_T{ti}"
                 emitted_now: list[Fact] = []
                 for year, value in periods:
                     if value is None:
                         continue
                     if flip_sign:
                         value = -value
-                    counter += 1
                     fact = Fact(
-                        fact_id=f"{company_id}_{year}_{match.concept}_{counter}",
+                        fact_id=_fact_id(
+                            company_id, year, match.concept, statement_enum.value,
+                            match.section, source_table, label,
+                        ),
                         company_id=company_id,
                         fiscal_year=year,
                         period_type=PeriodType.YEAR,
-                        statement=_STATEMENT_MAP.get(match.statement, StatementType.UNKNOWN),
+                        statement=statement_enum,
                         section=match.section,
                         line_item_original_anonymized=label,
                         concept=match.concept,
@@ -283,7 +313,7 @@ def facts_from_tables(
                         scale=scale,
                         sign=-1 if value < 0 else 1,
                         source_page=page,
-                        source_table=f"P{page}_T{ti}",
+                        source_table=source_table,
                         confidence=match.confidence,
                     )
                     facts.append(fact)
