@@ -58,6 +58,8 @@ concepts:
      synonyms: ["Jahresüberschuss", "Jahresüberschuss / Jahresfehlbetrag", "Jahresfehlbetrag"]}
   - {concept: summe_eigenkapital, statement: bilanz, section: passiva,
      synonyms: ["Summe Eigenkapital"]}
+  - {concept: sonderposten, statement: bilanz, section: passiva,
+     synonyms: ["Sonderposten aus Zuschüssen für Investitionen", "Sonderposten für Investitionszuschüsse", "Sonderposten für Investitionen", "Sonderposten mit Rücklageanteil", "Sonderposten"]}
   - {concept: rueckstellungen, statement: bilanz, section: passiva,
      synonyms: ["Rückstellungen"]}
   - {concept: pensionsrueckstellungen, statement: bilanz, section: passiva,

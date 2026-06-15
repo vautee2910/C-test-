@@ -384,6 +384,24 @@ def test_fact_id_is_stable_when_only_the_value_changes():
     assert cur1.value != cur2.value
 
 
+def test_sonderposten_passiva_is_captured():
+    # Subsidized/public entities (e.g. NOW GmbH) carry "Sonderposten aus
+    # Zuschüssen für Investitionen" between equity and liabilities; without it the
+    # balance sheet does not add up.
+    matcher = ConceptMatcher.from_yaml()
+    tables = {5: [ReconstructedTable(n_columns=2, items=[
+        LineItem("B. Sonderposten aus Zuschüssen für", [None, None], y=1),
+        LineItem("Investitionen", [1102432.0, 0.0], y=2),
+    ])]}
+    facts = facts_from_tables(
+        tables, company_id="C", fiscal_year=2021, matcher=matcher,
+        statement_by_page={5: "bilanz"},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2021)
+    assert cur.concept == "sonderposten"
+    assert cur.value == pytest.approx(1102432.0)
+
+
 def test_emit_prior_year_can_be_disabled():
     matcher = ConceptMatcher.from_yaml()
     tables = {6: [_table([LineItem("1. Umsatzerlöse", [None, 2092019.57, 2175554.06], y=1)])]}
