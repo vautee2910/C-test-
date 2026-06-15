@@ -54,6 +54,11 @@ Geprüft wird (nur gemeldet, nie verändert):
 - **Gebrochene Identitäten** (`warning`): gemeldete Summe ≠ Σ Komponenten
   (Bilanzsumme, Gesamtleistung = Umsatz + Bestandsveränderung, Personal-/
   Materialaufwand) — nur wenn Summe und genug Komponenten vorliegen.
+- **Bilanz geht nicht auf** (`warning`): Aktiva ≠ Passiva, je Seite aus den
+  Sektion-Subtotals summiert (Gruppentotal sonst Σ Komponenten, keine
+  Doppelzählung) — meldet eine fehlende oder verlesene Position. Nur wenn beide
+  Seiten durch ihre Summen verankert sind. Am echten Scan korrekt angeschlagen
+  (Aktiva ≠ Passiva), an den sauberen Belegen still.
 - **Niedrige Konfidenz** (`info`): Facts unter `review_confidence` (Default 0,7)
   — Teil-Absicherung gegen Fehler, die sich nicht duplizieren.
 

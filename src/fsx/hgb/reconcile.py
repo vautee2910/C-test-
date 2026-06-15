@@ -16,6 +16,9 @@ Two families:
   Gesamtleistung = Umsatz + Bestandsveränderung, Personal-/Materialaufwand).
   Evaluated only when the aggregate *and* enough components are present, so the
   check never invents a complaint from data that simply was not extracted.
+* **Bilanz does not balance** — Aktiva total != Passiva total, summed from the
+  section subtotals (so a missing or mis-read position surfaces). Checked only
+  when both sides are anchored by their subtotals.
 
 All amounts are compared at their effective scale (``value * scale``) with a
 combined relative/absolute tolerance, so genuine rounding never trips a flag.
@@ -166,6 +169,71 @@ def _broken_identities(
     return issues
 
 
+# A balance sheet must satisfy Aktiva = Passiva. Both sides are summed from their
+# *section subtotals*, not every line, to avoid double-counting a group total and
+# its components. For the two passiva groups that may be reported either as one
+# total or as individual positions, the group total wins when present, else the
+# components are summed (mirrors the reported-else-computed rule in analysis).
+_AKTIVA_TOTAL = ("summe_anlagevermoegen", "summe_umlaufvermoegen")
+_AKTIVA_EXTRA = ("rechnungsabgrenzungsposten_aktiv",)
+_PASSIVA_EXTRA = ("summe_eigenkapital", "sonderposten", "rechnungsabgrenzungsposten_passiv")
+_RUECKSTELLUNGEN = (
+    "rueckstellungen",
+    ("pensionsrueckstellungen", "steuerrueckstellungen", "sonstige_rueckstellungen"),
+)
+_VERBINDLICHKEITEN = (
+    "verbindlichkeiten",
+    ("verbindlichkeiten_kreditinstitute", "erhaltene_anzahlungen",
+     "verbindlichkeiten_lul", "sonstige_verbindlichkeiten"),
+)
+
+
+def _resolve_group(vals: dict[str, float], total: str, components: tuple[str, ...]) -> float:
+    """Group total if reported, else the sum of whatever components are present."""
+    if total in vals:
+        return vals[total]
+    return sum(vals[c] for c in components if c in vals)
+
+
+def _bilanz_balance(
+    facts: list[Fact], rel_tol: float, abs_tol: float
+) -> list[ReconciliationIssue]:
+    by: dict[tuple[str, int], dict[str, float]] = defaultdict(dict)
+    for f in facts:
+        by[(f.company_id, f.fiscal_year)].setdefault(f.concept, _effective(f))
+
+    issues: list[ReconciliationIssue] = []
+    for (company_id, year), vals in by.items():
+        # Only check when both sides are anchored by their subtotals; otherwise an
+        # absent subtotal would make a complete sheet look unbalanced.
+        if not all(c in vals for c in (*_AKTIVA_TOTAL, "summe_eigenkapital")):
+            continue
+        aktiva = sum(vals[c] for c in _AKTIVA_TOTAL) + sum(vals.get(c, 0.0) for c in _AKTIVA_EXTRA)
+        passiva = (
+            sum(vals.get(c, 0.0) for c in _PASSIVA_EXTRA)
+            + _resolve_group(vals, *_RUECKSTELLUNGEN)
+            + _resolve_group(vals, *_VERBINDLICHKEITEN)
+        )
+        if not _differ(aktiva, passiva, rel_tol, abs_tol):
+            continue
+        issues.append(
+            ReconciliationIssue(
+                kind="bilanz_imbalance",
+                severity="warning",
+                company_id=company_id,
+                fiscal_year=year,
+                concept="bilanzsumme",
+                message=(
+                    f"Bilanz ({year}) does not balance: Aktiva {aktiva:,.2f} "
+                    f"!= Passiva {passiva:,.2f} (Δ {aktiva - passiva:,.2f}) — "
+                    f"a position is likely missing or mis-read."
+                ),
+                values=[round(aktiva, 2), round(passiva, 2)],
+            )
+        )
+    return issues
+
+
 def _low_confidence(
     facts: list[Fact], review_confidence: float
 ) -> list[ReconciliationIssue]:
@@ -211,6 +279,7 @@ def reconcile_facts(
     """
     issues = _conflicting_values(facts, rel_tol, abs_tol)
     issues += _broken_identities(facts, identities, rel_tol, abs_tol)
+    issues += _bilanz_balance(facts, rel_tol, abs_tol)
     if review_confidence > 0:
         issues += _low_confidence(facts, review_confidence)
     issues.sort(key=lambda i: (_SEVERITY_RANK.get(i.severity, 9), i.fiscal_year, i.concept))

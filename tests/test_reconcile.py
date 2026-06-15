@@ -125,6 +125,51 @@ def test_custom_identity_respected():
     assert [i.concept for i in issues] == ["total"]
 
 
+def _bfact(concept, value, **kw):
+    return _fact(concept, value, statement=StatementType.BILANZ, **kw)
+
+
+def test_balanced_bilanz_has_no_imbalance_issue():
+    facts = [
+        _bfact("summe_anlagevermoegen", 1000.0),
+        _bfact("summe_umlaufvermoegen", 500.0),
+        _bfact("summe_eigenkapital", 900.0),
+        _bfact("verbindlichkeiten", 600.0),
+    ]  # Aktiva 1500 == Passiva 1500
+    assert all(i.kind != "bilanz_imbalance" for i in reconcile_facts(facts))
+
+
+def test_unbalanced_bilanz_is_flagged():
+    facts = [
+        _bfact("summe_anlagevermoegen", 1000.0),
+        _bfact("summe_umlaufvermoegen", 500.0),
+        _bfact("summe_eigenkapital", 900.0),
+        _bfact("verbindlichkeiten", 700.0),
+    ]  # Aktiva 1500 != Passiva 1600
+    issues = [i for i in reconcile_facts(facts) if i.kind == "bilanz_imbalance"]
+    assert len(issues) == 1 and issues[0].severity == "warning"
+    assert issues[0].values == [1500.0, 1600.0]
+
+
+def test_balance_check_skipped_when_a_subtotal_is_missing():
+    facts = [
+        _bfact("summe_anlagevermoegen", 1000.0),  # no summe_umlaufvermoegen
+        _bfact("summe_eigenkapital", 900.0),
+    ]
+    assert all(i.kind != "bilanz_imbalance" for i in reconcile_facts(facts))
+
+
+def test_balance_uses_group_total_not_double_counting_components():
+    facts = [
+        _bfact("summe_anlagevermoegen", 1000.0),
+        _bfact("summe_umlaufvermoegen", 500.0),
+        _bfact("summe_eigenkapital", 900.0),
+        _bfact("rueckstellungen", 600.0),          # group total present...
+        _bfact("steuerrueckstellungen", 600.0),    # ...so this component is ignored
+    ]  # Passiva = 900 + 600 (group) = 1500 == Aktiva 1500
+    assert all(i.kind != "bilanz_imbalance" for i in reconcile_facts(facts))
+
+
 def test_low_confidence_fact_flagged_as_info():
     facts = [
         Fact(fact_id="x", company_id="C1", fiscal_year=2024, concept="soziale_abgaben",
