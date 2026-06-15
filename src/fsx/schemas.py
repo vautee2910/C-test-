@@ -101,6 +101,29 @@ class RawDocument(BaseModel):
     pages: list[Page] = Field(default_factory=list)
 
 
+class SegmentClassification(BaseModel):
+    """Per-segment family classification — raw values for an external host.
+
+    A heterogeneous document (e.g. a statistical yearbook) is not one family: one
+    chapter is a Jahresabschluss, the next is unrelated. Document-global
+    classification flattens that, so this is the per-segment (per-page) raw
+    evidence instead. The pipeline computes and returns it; it deliberately
+    carries **no** persistence or attachment to the content — the host's context
+    engine correlates it with the Level-1 pages (by ``page``) and stores the
+    metadata itself (no-persistence-in-core invariant).
+
+    ``family`` is the chosen family or ``"unknown"``; ``qualifies`` says whether
+    any family met its marker threshold; ``marker_hits`` is the full per-family
+    evidence so the host can apply its own threshold/routing.
+    """
+
+    page: int
+    family: str
+    qualifies: bool
+    score: int = 0
+    marker_hits: dict[str, int] = Field(default_factory=dict)
+
+
 # --------------------------------------------------------------------------- #
 # Level 2 — normalised facts
 # --------------------------------------------------------------------------- #

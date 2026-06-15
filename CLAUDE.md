@@ -133,6 +133,17 @@ Done and tested:
   sheets no longer see bank positions; bank sheets resolve with no caller config.
   Per-period scale handles bank "Tsd. EUR" prior columns; the dash-separated
   prior column no longer triggers a spurious panel split.
+- **Non-statement / heterogeneous documents**: `facts_from_tables` suppresses
+  panels with `>= 4` value columns — cross-sectional / multi-year statistics
+  matrices (e.g. a Destatis Jahrbuch table by Wirtschaftsbereich) have no
+  unambiguous value column, so per precision-over-recall they emit no Fact (the
+  dedicated `anlagenspiegel` path keeps handling legitimately-wide statements via
+  its column-header → dimension mapping). For hybrid/RAG hosts,
+  `concepts.classify_segments(page_texts) -> list[SegmentClassification]` returns
+  per-page raw family classification + full marker-hit evidence (a compendium is
+  not one family); the host correlates it with Level-1 pages and owns the
+  metadata (no persistence in core). `RawDocument` (Level 1) always keeps the
+  full anonymised content regardless of Fact suppression — that is the RAG index.
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
 - Anonymisation: dictionary + regex core, plus two optional, injectable model

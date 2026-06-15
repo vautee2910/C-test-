@@ -66,6 +66,27 @@ class FamilyRegistry:
         scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
         return scored[0][2]
 
+    def classify_with_scores(self, text: str) -> tuple[Family, dict[str, int]]:
+        """Like :meth:`classify_text` but also return raw per-family marker hits.
+
+        The hit map is the unfiltered evidence (every family's marker count,
+        whether or not it met ``min_markers``), so a host doing hybrid /
+        per-segment routing can see *why* a segment was (not) classified — e.g. a
+        page that scores 1 marker just below the threshold. Returns the chosen
+        family (``unknown`` when nothing qualifies) and ``{family_name: hits}``.
+        """
+        folded = normalise_label(text)
+        hits = {f.name: f.marker_hits(folded) for f in self.families}
+        qualifying = [
+            (f.priority, hits[f.name], f)
+            for f in self.families
+            if hits[f.name] >= f.min_markers
+        ]
+        if not qualifying:
+            return self.unknown, hits
+        qualifying.sort(key=lambda t: (t[0], t[1]), reverse=True)
+        return qualifying[0][2], hits
+
     def by_name(self, name: str) -> Family:
         if name == self.unknown.name:
             return self.unknown

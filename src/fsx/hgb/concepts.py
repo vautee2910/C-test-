@@ -109,6 +109,37 @@ def classify_document_family(text: str) -> str:
     return REGISTRY.classify_text(text).name
 
 
+def classify_segments(page_texts: list[str]) -> list["SegmentClassification"]:
+    """Classify each page (segment) independently — raw values for the host.
+
+    Document-global classification is wrong for a heterogeneous compendium (a
+    statistical yearbook whose chapter 9.4 is a Jahresabschluss while other
+    chapters are unrelated). This returns one :class:`SegmentClassification` per
+    page with the chosen family and the full per-family marker evidence, so a
+    hybrid / agentic-RAG host can route or filter per segment using its own
+    metadata, instead of trusting a single document label.
+
+    Pure text transform (no PDF/fitz dependency); pass the per-page text in page
+    order. Indices are 1-based to match Level-1 ``Page.page``.
+    """
+    from ..schemas import SegmentClassification
+    from .families import REGISTRY
+
+    out: list[SegmentClassification] = []
+    for i, text in enumerate(page_texts, start=1):
+        family, hits = REGISTRY.classify_with_scores(text or "")
+        out.append(
+            SegmentClassification(
+                page=i,
+                family=family.name,
+                qualifies=family.name != REGISTRY.unknown.name,
+                score=hits.get(family.name, 0),
+                marker_hits=hits,
+            )
+        )
+    return out
+
+
 def concept_paths_for_family(family: str) -> tuple[Path, ...]:
     """Concept YAML(s) a family loads (a shared base plus its specifics).
 

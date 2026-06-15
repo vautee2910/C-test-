@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from fsx.hgb.concepts import DEFAULT_BANK_CONCEPTS, DEFAULT_HGB_CONCEPTS
+from fsx.hgb.concepts import (
+    DEFAULT_BANK_CONCEPTS,
+    DEFAULT_HGB_CONCEPTS,
+    classify_segments,
+)
 from fsx.hgb.families import REGISTRY, load_registry
 
 
@@ -40,6 +44,34 @@ def test_from_concepts_identifies_family_for_reconcile():
     assert REGISTRY.from_concepts({"barreserve", "bilanzsumme"}).name == "bank"
     # No signature concept -> base hgb rules (not "unknown").
     assert REGISTRY.from_concepts({"umsatzerloese"}).name == "hgb"
+
+
+def test_classify_with_scores_exposes_all_family_hits():
+    # The raw hit map carries every family's count, including a sub-threshold one,
+    # so a host can apply its own routing rule.
+    fam, hits = REGISTRY.classify_with_scores(
+        "Bilanz Gewinn- und Verlustrechnung Umsatzerlöse"
+    )
+    assert fam.name == "hgb"
+    assert hits["hgb"] >= 2
+    assert hits["bank"] == 0
+
+
+def test_classify_segments_is_per_page_for_heterogeneous_documents():
+    # A compendium: one page is a Jahresabschluss, the others are unrelated. The
+    # per-segment result must label only the statement page, not the whole doc.
+    pages = [
+        "Einnahmen und Ausgaben privater Haushalte im Zeitvergleich",
+        "Bilanz Gewinn- und Verlustrechnung Umsatzerlöse Anlagevermögen Sachanlagen",
+        "Personal des öffentlichen Dienstes nach Bereichen",
+    ]
+    segs = classify_segments(pages)
+    assert [s.page for s in segs] == [1, 2, 3]
+    assert segs[0].family == "unknown" and not segs[0].qualifies
+    assert segs[1].family == "hgb" and segs[1].qualifies
+    assert segs[1].score >= 2
+    assert segs[1].marker_hits["hgb"] == segs[1].score
+    assert segs[2].family == "unknown" and not segs[2].qualifies
 
 
 def test_registry_is_reloadable_from_yaml():
