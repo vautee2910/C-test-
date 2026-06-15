@@ -14,7 +14,12 @@ import pytest
 
 from fsx.anonymize import Anonymizer, DictionaryDetector, DictionaryEntity, RegexDetector
 from fsx.anonymize.labels import Label
-from fsx.anonymize.model_detectors import PRIORITY_MODEL, SpacyNerDetector
+from fsx.anonymize.model_detectors import (
+    PRIORITY_MODEL,
+    PrivacyFilterDetector,
+    SpacyNerDetector,
+    _privacy_spans,
+)
 
 _SPACY_MODEL = "de_core_news_lg"
 
@@ -202,3 +207,56 @@ def test_real_spacy_model_lifts_recall_in_engine():
     assert "[UNTERNEHMEN_1]" in res.text
     assert "Joe Kaeser" not in res.text
     assert "München" not in res.text
+
+
+# --------------------------------------------------------------------------- #
+# openai/privacy-filter detector (BIOES decode + mapping), model injected
+# --------------------------------------------------------------------------- #
+
+
+def _pf(tokens, **kw):
+    """A PrivacyFilterDetector whose model is a fixed token-label list."""
+    return PrivacyFilterDetector(lambda text: tokens, **kw)
+
+
+def test_privacy_spans_decode_bioes_and_trim():
+    text = "Max Mustermann in Berlin"
+    tokens = [
+        ("B-private_person", 0, 3),     # "Max"
+        ("E-private_person", 3, 14),    # " Mustermann"
+        ("O", 14, 17),                  # " in"
+        ("S-private_address", 17, 24),  # " Berlin"
+    ]
+    spans = _privacy_spans([t[0] for t in tokens], [(t[1], t[2]) for t in tokens], text)
+    assert spans == [("private_person", 0, 14), ("private_address", 18, 24)]
+
+
+def test_privacy_detector_maps_categories_to_labels():
+    text = "Max Mustermann in Berlin"
+    tokens = [
+        ("B-private_person", 0, 3), ("E-private_person", 3, 14),
+        ("O", 14, 17), ("S-private_address", 17, 24),
+    ]
+    spans = _pf(tokens).detect(text)
+    by = {s.label: s.text for s in spans}
+    assert by[Label.PERSON] == "Max Mustermann"
+    assert by[Label.ADDRESS] == "Berlin"
+    assert all(s.priority == PRIORITY_MODEL and s.source == "privacy-filter" for s in spans)
+
+
+def test_privacy_detector_new_b_starts_a_second_entity():
+    text = "Anna Berta"
+    tokens = [("B-private_person", 0, 4), ("B-private_person", 4, 10)]  # two people
+    spans = _pf(tokens).detect(text)
+    assert [s.text for s in spans] == ["Anna", "Berta"]
+
+
+def test_privacy_detector_respects_enabled_labels_and_stopwords():
+    text = "Max in Bilanz"
+    tokens = [
+        ("S-private_person", 0, 3),      # Max -> kept
+        ("O", 3, 6),
+        ("S-private_address", 6, 13),    # " Bilanz" mis-tagged -> dropped by stopword
+    ]
+    spans = _pf(tokens, stopwords=["bilanz"], enabled_labels={Label.PERSON, Label.ADDRESS}).detect(text)
+    assert [s.text for s in spans] == ["Max"]

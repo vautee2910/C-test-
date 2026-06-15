@@ -45,11 +45,12 @@ import yaml
 from .anonymize.detectors import REGEX_RULES, DictionaryDetector, DictionaryEntity, RegexDetector
 from .anonymize.engine import Anonymizer
 from .anonymize.labels import Label
-from .anonymize.model_detectors import SpacyNerDetector
+from .anonymize.model_detectors import PrivacyFilterDetector, SpacyNerDetector
 
-# Signature of a spaCy-detector loader; injectable so config wiring is testable
-# without the ~500 MB model. Defaults to ``SpacyNerDetector.load``.
+# Signature of a model-detector loader; injectable so config wiring is testable
+# without the multi-hundred-MB models. Default to the respective ``.load``.
 SpacyLoader = Callable[..., Any]
+PrivacyLoader = Callable[..., Any]
 
 # Dictionary category -> (canonical label, grouped?).
 # "grouped" means all entries are aliases of ONE entity (share a token);
@@ -171,6 +172,7 @@ def _build_model_detectors(
     config: dict[str, Any],
     *,
     spacy_loader: SpacyLoader | None = None,
+    privacy_loader: PrivacyLoader | None = None,
 ) -> list[Any]:
     """Build opt-in statistical NER detectors from the ``models`` config section.
 
@@ -180,23 +182,39 @@ def _build_model_detectors(
     real model. A loader error (missing package/model) propagates, since the
     detector was explicitly requested.
     """
-    spacy_cfg = (config.get("models") or {}).get("spacy") or {}
-    if not spacy_cfg.get("enabled", False):
-        return []
-    loader = spacy_loader if spacy_loader is not None else SpacyNerDetector.load
-    detector = loader(
-        spacy_cfg.get("model", "de_core_news_lg"),
-        enabled_labels=_parse_labels(spacy_cfg.get("labels")),
-        min_length=int(spacy_cfg.get("min_length", 2)),
-        stopwords=_ner_stopwords(spacy_cfg),
-    )
-    return [detector]
+    models = config.get("models") or {}
+    detectors: list[Any] = []
+
+    spacy_cfg = models.get("spacy") or {}
+    if spacy_cfg.get("enabled", False):
+        loader = spacy_loader if spacy_loader is not None else SpacyNerDetector.load
+        detectors.append(loader(
+            spacy_cfg.get("model", "de_core_news_lg"),
+            enabled_labels=_parse_labels(spacy_cfg.get("labels")),
+            min_length=int(spacy_cfg.get("min_length", 2)),
+            stopwords=_ner_stopwords(spacy_cfg),
+        ))
+
+    pf_cfg = models.get("privacy_filter") or {}
+    if pf_cfg.get("enabled", False):
+        loader = privacy_loader if privacy_loader is not None else PrivacyFilterDetector.load
+        kwargs: dict[str, Any] = {
+            "variant": pf_cfg.get("variant", "q4f16"),
+            "enabled_labels": _parse_labels(pf_cfg.get("labels")),
+            "stopwords": _ner_stopwords(pf_cfg),
+        }
+        if pf_cfg.get("repo"):
+            kwargs["repo"] = pf_cfg["repo"]
+        detectors.append(loader(**kwargs))
+
+    return detectors
 
 
 def build_anonymizer(
     config: dict[str, Any],
     *,
     spacy_loader: SpacyLoader | None = None,
+    privacy_loader: PrivacyLoader | None = None,
 ) -> Anonymizer:
     """Construct an :class:`Anonymizer` from a parsed config dict.
 
@@ -209,10 +227,19 @@ def build_anonymizer(
         DictionaryDetector(entities),
         RegexDetector(enabled_labels=regex_labels),
     ]
-    detectors.extend(_build_model_detectors(config, spacy_loader=spacy_loader))
+    detectors.extend(_build_model_detectors(
+        config, spacy_loader=spacy_loader, privacy_loader=privacy_loader,
+    ))
     return Anonymizer(detectors, token_overrides=_build_token_overrides(config))
 
 
-def load_anonymizer(path: str | Path, *, spacy_loader: SpacyLoader | None = None) -> Anonymizer:
+def load_anonymizer(
+    path: str | Path,
+    *,
+    spacy_loader: SpacyLoader | None = None,
+    privacy_loader: PrivacyLoader | None = None,
+) -> Anonymizer:
     """Convenience: load a YAML config from ``path`` and build the engine."""
-    return build_anonymizer(load_config(path), spacy_loader=spacy_loader)
+    return build_anonymizer(
+        load_config(path), spacy_loader=spacy_loader, privacy_loader=privacy_loader,
+    )

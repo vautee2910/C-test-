@@ -143,18 +143,50 @@ wird überall dort, wo beide feuern, zugunsten des Dictionarys aufgelöst – da
 Dictionary bleibt der Ort für geteilte Synonyme (Leitprinzip: Recall über
 KB-Synonyme, nicht über Spezialfälle).
 
+### NER-Rauschfilter (für Abschlüsse)
+Auf echten Belegen redigierte das allgemeine spaCy-de Statement-Vokabular
+(`BILANZ`, `AKTIVA`, `PASSIVA`, …) als Firma und Enumeratoren (`I.`, `II.`) als
+Person. Zwei Filter, die den Detektor **domänenfrei** halten:
+- **Struktur-Filter** (im Detektor, generisch): verwirft reine Enumeratoren und
+  Oberflächen ohne echtes Wort.
+- **Stoppwörter** (injiziert): `fsx.config._DEFAULT_NER_STOPWORDS` (Statement-/
+  Positions-Vokabular). Gematcht wird die *ganze* Oberfläche, eine Firma, die ein
+  solches Wort nur *enthält* („Aktiva Verwaltungs GmbH"), bleibt erhalten.
+
+### `PrivacyFilterDetector` (openai/privacy-filter)
+Zweckgebautes PII-Token-Classification-Modell (gpt-oss-artig, 50 M aktive
+Parameter, ONNX, Apache-2.0). Stark bei **Personen-/Kontakt-PII** — Person,
+Adresse, E-Mail, Telefon, URL, Datum, Kontonummer, Secret — und gut auf Deutsch.
+**Kein Organisations-Label**, also Ergänzung zu Dictionary/spaCy, kein Ersatz für
+Firmennamen.
+
+- **Leichtgewichtige ONNX-Route:** `onnxruntime` + `tokenizers` + `huggingface_hub`
+  (kein torch). `PrivacyFilterDetector.load(variant="q4f16")` lädt die quantisierten
+  Gewichte (~0,8 GB) einmalig vom HF-Hub (egress, siehe `network-allowlist.md`).
+- **Injizierbar:** Konstruktor nimmt ein `predict`-Callable
+  (`text -> [(BIOES-Label, start, end)]`); das Decoding (`_privacy_spans`) ist
+  rein und offline testbar.
+- gleiche `PRIORITY_MODEL`-Stufe und Struktur-/Stoppwort-Filter wie spaCy.
+
 ### Konfiguration (opt-in, Default aus)
 ```yaml
 # config/known_entities.yaml
 models:
-  spacy:
+  spacy:                              # Firmen/Orte (hat ORG-Label)
     enabled: true
-    model: de_core_news_lg          # lokales spaCy-Paket
-    labels: [PERSON, COMPANY, LOCATION]   # optionaler Label-Filter
+    model: de_core_news_lg
+    labels: [PERSON, COMPANY, LOCATION]
     min_length: 2
+  privacy_filter:                     # Personen-/Kontakt-PII (kein ORG)
+    enabled: true
+    variant: q4f16                    # q4f16 (~0,8 GB) | q4 | quantized | fp16
+    labels: [PERSON, ADDRESS, EMAIL, PHONE, ACCOUNT_NUMBER]   # optional
 ```
-Ohne `models`-Abschnitt verhält sich die Engine exakt wie bisher (nur Dictionary
-+ Regex).
+Beide Modell-Layer sind unabhängig zuschaltbar und ergänzen sich (spaCy für
+Organisationen, privacy-filter für saubere Personen-/Kontakt-PII). Ohne
+`models`-Abschnitt bleibt die Engine wie bisher (nur Dictionary + Regex).
+Benötigt: `pip install onnxruntime tokenizers huggingface_hub` (privacy-filter)
+bzw. `pip install spacy` + Modell (spaCy) — beide optional.
 
 ### Installation (einmalig)
 ```bash

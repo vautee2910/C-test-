@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from fsx.anonymize.labels import Label
-from fsx.anonymize.model_detectors import SpacyNerDetector
+from fsx.anonymize.model_detectors import PrivacyFilterDetector, SpacyNerDetector
 from fsx.config import build_anonymizer, load_anonymizer
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -135,6 +135,43 @@ def test_spacy_loader_not_called_when_disabled():
     cfg = {"models": {"spacy": {"enabled": False}}}
     eng = build_anonymizer(cfg, spacy_loader=boom)
     assert len(eng.detectors) == 2
+
+
+def test_privacy_filter_wired_when_enabled():
+    captured = {}
+
+    def fake_loader(*, variant="q4f16", enabled_labels=None, stopwords=None, repo=None):
+        captured.update(variant=variant, labels=enabled_labels, repo=repo)
+        # A fixed predictor: one person token, exercised below.
+        return PrivacyFilterDetector(
+            lambda text: [("S-private_person", 0, 3)], enabled_labels=enabled_labels
+        )
+
+    cfg = {"models": {"privacy_filter": {"enabled": True, "variant": "q4", "labels": ["PERSON"]}}}
+    eng = build_anonymizer(cfg, privacy_loader=fake_loader)
+
+    assert captured["variant"] == "q4"
+    assert captured["labels"] == {Label.PERSON}
+    assert len(eng.detectors) == 3  # dict + regex + privacy-filter
+    res = eng.anonymize("Max wohnt hier")
+    assert res.text.startswith("[PERSON_1]")
+
+
+def test_both_model_detectors_can_be_enabled_together():
+    spacy_calls, pf_calls = [], []
+
+    def fake_spacy(model, **k):
+        spacy_calls.append(model)
+        return SpacyNerDetector(lambda t: type("D", (), {"ents": []})())
+
+    def fake_pf(**k):
+        pf_calls.append(k.get("variant"))
+        return PrivacyFilterDetector(lambda t: [])
+
+    cfg = {"models": {"spacy": {"enabled": True}, "privacy_filter": {"enabled": True}}}
+    eng = build_anonymizer(cfg, spacy_loader=fake_spacy, privacy_loader=fake_pf)
+    assert len(eng.detectors) == 4  # dict + regex + spacy + privacy-filter
+    assert spacy_calls and pf_calls
 
 
 def test_example_yaml_loads_and_anonymises():

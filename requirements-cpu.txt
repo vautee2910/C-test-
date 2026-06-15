@@ -36,10 +36,13 @@ ocrmypdf
 # pdfplumber
 # camelot-py[cv]
 
-# --- Anonymisation ---
+# --- Anonymisation (optional model detectors, off by default) ---
+# spacy                       # + `python -m spacy download de_core_news_lg`  (ORG/person/location NER)
+# onnxruntime                 # openai/privacy-filter (person/contact PII) — ONNX route, no torch
+# tokenizers
+# huggingface_hub
 # presidio-analyzer
 # presidio-anonymizer
-# spacy
 
 # --- Structured data / analysis ---
 # pandas

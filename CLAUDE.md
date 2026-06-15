@@ -117,6 +117,13 @@ Done and tested:
   (`AnalysisReport`).
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
+- Anonymisation: dictionary + regex core, plus two optional, injectable model
+  detectors in `anonymize/model_detectors.py` — `SpacyNerDetector` (ORG/person/
+  location; with structural + injected stopword filtering so it stops redacting
+  statement vocabulary) and `PrivacyFilterDetector` (openai/privacy-filter ONNX,
+  person/contact PII, no ORG). Both off by default, enabled via the `models`
+  config section. The anonymiser targets *all* document types, not only
+  statements.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
