@@ -214,6 +214,25 @@ def test_geometry_reconstruction_is_primary_table_source(tmp_path: Path):
     assert rows["Materialaufwand"] == ["5678"]
 
 
+def test_level1_table_carries_named_columns(tmp_path: Path):
+    # A clean period-year header above the body is surfaced as named value
+    # columns on the Level-1 table, so a host can query columns by name.
+    pdf = _make_pdf(
+        tmp_path,
+        [[
+            (400, 80, "2023"), (470, 80, "2022"),
+            (72, 100, "Umsatzerlöse"), (400, 100, "1.234"), (470, 100, "1.100"),
+            (72, 120, "Materialaufwand"), (400, 120, "5.678"), (470, 120, "5.000"),
+        ]],
+    )
+    raw = parse_pdf(
+        pdf, anonymizer=_make_anonymizer(),
+        document_id="D", company_id="C", fiscal_year=2023,
+    )
+    table = next(t for t in raw.pages[0].tables if t.column_headers)
+    assert table.column_headers == ["2023", "2022"]
+
+
 # --------------------------------------------------------------------------- #
 # Cross-page consistency
 # --------------------------------------------------------------------------- #

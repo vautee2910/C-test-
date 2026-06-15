@@ -82,6 +82,10 @@ class Table(BaseModel):
     table_id: str
     caption_anonymized: Optional[str] = None
     cells: list[list[str]] = Field(default_factory=list)
+    # Optional name for each *value* column (aligns to ``cells[i][1:]``), e.g.
+    # the period years of a statement. Empty when columns could not be named
+    # reliably — the host then treats columns positionally.
+    column_headers: list[str] = Field(default_factory=list)
     bbox: Optional[BBox] = None
 
 

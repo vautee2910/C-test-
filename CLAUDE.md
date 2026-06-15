@@ -150,7 +150,13 @@ Done and tested:
   statement / statistics tables into one text blob or misses the body entirely;
   the reconstruction recovers the row × value-column grid, so `RawDocument.tables`
   is queryable (SQL-grade). Only labels are anonymised — numeric values stay
-  verbatim, so no PII regex can corrupt a figure into a token.
+  verbatim, so no PII regex can corrupt a figure into a token. Value columns are
+  named (`Table.column_headers` / `ReconstructedTable.column_headers`) **only**
+  for unambiguous *period* headers (a year/date row above the body); generic
+  geometric header→column mapping is unreliable on heterogeneous layouts (it
+  mislabels caption/title fragments), so per precision-over-recall everything
+  else stays positional (`[]`) and the host names columns itself. Document-type
+  header semantics belong in a tuned extractor (cf. `anlagenspiegel`).
 - **Anonymiser number integrity**: the PHONE regex carries a second lookbehind
   `(?<!\d\s)` so a space-separated thousands continuation ("2 076 909" → "076
   909") is not eaten as a phone number — it kept corrupting figures in

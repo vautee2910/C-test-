@@ -69,6 +69,10 @@ class ReconstructedTable:
     n_columns: int
     items: list[LineItem] = field(default_factory=list)
     x_range: Optional[tuple[float, float]] = None
+    # One header phrase per value column (left→right), or empty when the column
+    # headers could not be resolved geometrically. Lets a host name the columns
+    # (e.g. period years, statistics breakdown dimensions) for SQL.
+    column_headers: list[str] = field(default_factory=list)
 
 
 # Pieces of a German number split by a space acting as thousands separator:
@@ -303,6 +307,55 @@ def _build_line_item(
     return LineItem(label=" ".join(label_parts).strip(), values=values, y=y)
 
 
+# A period column header: a 4-digit year (optionally a range "2015/17") or a
+# full date. Used to gate column naming to the unambiguous statement case.
+_PERIOD_HEADER_RE = re.compile(r"(?:19|20)\d{2}|\d{1,2}\.\d{1,2}\.\d{2,4}")
+
+
+def _column_header_phrases(
+    header_words: list[Word], anchors: list[float]
+) -> list[str]:
+    """Bind label-only header words above the body to their value column.
+
+    Generalises the Anlagenspiegel column-header reading: value figures are
+    right-aligned at each ``anchor`` (their ``x1``), so a header sits slightly to
+    the *left* of and above its column. Each header word is assigned to the
+    nearest anchor within an asymmetric band scaled to the column spacing; words
+    far to the left (a row label, a page title) fall outside every band and are
+    dropped. Multi-line headers stack top→bottom, left→right. Returns one phrase
+    per column (``""`` where nothing mapped), or ``[]`` if nothing mapped at all.
+    """
+    if not anchors or not header_words:
+        return []
+    if len(anchors) > 1:
+        gap = min(anchors[i + 1] - anchors[i] for i in range(len(anchors) - 1))
+    else:
+        gap = 80.0
+    left_tol, right_tol = 0.85 * gap, 0.30 * gap
+    buckets: list[list[Word]] = [[] for _ in anchors]
+    for w in header_words:
+        i = min(range(len(anchors)), key=lambda k: abs(anchors[k] - w.cx))
+        if anchors[i] - left_tol <= w.cx <= anchors[i] + right_tol:
+            buckets[i].append(w)
+    phrases = [
+        " ".join(w.text for w in sorted(b, key=lambda w: (round(w.cy, 1), w.x0))).strip()
+        for b in buckets
+    ]
+    nonempty = [p for p in phrases if p]
+    if not nonempty:
+        return []
+    # Precision guard: geometry alone cannot tell a real column header from a
+    # caption / section phrase that merely sits in the band, so naming is
+    # restricted to the one unambiguous, genuinely useful case for statements —
+    # *period* headers. Accept only when most named columns look like a year or
+    # date (a Geschäftsjahr/Vorjahr row); statistics breakdowns (sector names)
+    # and prose fragments then correctly stay positional ([]).
+    period_like = sum(1 for p in nonempty if _PERIOD_HEADER_RE.search(p))
+    if period_like < 0.6 * len(nonempty):
+        return []
+    return phrases
+
+
 def reconstruct_tables(
     words: list[Word],
     *,
@@ -346,12 +399,40 @@ def reconstruct_tables(
                 items.append(item)
         if not items:
             continue
+        # Column headers: the label-only rows in the band immediately above the
+        # body. Walk upward from the first valued row and stop at the first large
+        # vertical gap — that blank band separates the column-header rows from the
+        # page title, so the title's words do not leak into the headers.
+        first_value_y = min((it.y for it in items if it.has_values), default=None)
+        header_words: list[Word] = []
+        if first_value_y is not None:
+            seg_ys = sorted(
+                {sum(w.cy for w in s) / len(s) for s in segments if s}
+            )
+            diffs = [b - a for a, b in zip(seg_ys, seg_ys[1:]) if b - a > 0]
+            pitch = sorted(diffs)[len(diffs) // 2] if diffs else 12.0
+            # Only the single label-only row directly above the body — a one-line
+            # period/date header. A multi-line band invariably drags in caption /
+            # title prose, producing wrong column names, so it is not trusted.
+            above = sorted(
+                (
+                    s
+                    for s in segments
+                    if s
+                    and 0 < first_value_y - sum(w.cy for w in s) / len(s) <= 1.6 * pitch
+                    and not any(is_de_number(w.text) for w in s)
+                ),
+                key=lambda s: -sum(w.cy for w in s) / len(s),
+            )
+            if above:
+                header_words = above[0]
         xs = [w.x0 for w in panel_words] + [w.x1 for w in panel_words]
         tables.append(
             ReconstructedTable(
                 n_columns=len(anchors),
                 items=items,
                 x_range=(min(xs), max(xs)),
+                column_headers=_column_header_phrases(header_words, anchors),
             )
         )
     return tables

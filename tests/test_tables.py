@@ -210,3 +210,33 @@ def test_space_thousands_values_are_reconstructed():
     item = tables[0].items[0]
     assert item.label == "Handelsbestand"
     assert item.values == [20717.0, 22327.0]
+
+
+def test_column_headers_named_for_clean_single_row():
+    # A clean one-line header (period years) right above the body maps to the
+    # value columns, so a host can name them for SQL.
+    words = [
+        _w(480, 510, 250, "2023"), _w(579, 609, 250, "2022"),
+        _w(91, 200, 270, "Umsatzerlöse"),
+        _w(465, 510, 270, "1.234,00"), _w(564, 609, 270, "1.100,00"),
+        _w(91, 220, 290, "Materialaufwand"),
+        _w(465, 510, 290, "5.678,00"), _w(564, 609, 290, "5.000,00"),
+    ]
+    table = reconstruct_tables(words)[0]
+    assert table.n_columns == 2
+    assert table.column_headers == ["2023", "2022"]
+
+
+def test_column_headers_suppressed_for_non_period_header():
+    # Naming is gated to *period* headers (the unambiguous statement case). A
+    # cross-sectional breakdown (sector / category names, not years) cannot be
+    # named reliably from geometry, so it stays positional ([]).
+    words = [
+        _w(465, 510, 250, "Insgesamt"), _w(564, 609, 250, "Männlich"),
+        _w(91, 200, 270, "Beschäftigte"),
+        _w(465, 510, 270, "1.234,00"), _w(564, 609, 270, "1.100,00"),
+        _w(91, 220, 290, "Vollzeit"),
+        _w(465, 510, 290, "5.678,00"), _w(564, 609, 290, "5.000,00"),
+    ]
+    table = reconstruct_tables(words)[0]
+    assert table.column_headers == []

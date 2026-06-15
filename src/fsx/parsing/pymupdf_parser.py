@@ -143,11 +143,15 @@ class PyMuPDFParser:
                 cells.append([_clean_label(label)] + [_format_value(v) for v in item.values])
             if not cells:
                 continue
+            headers = [
+                self.anonymizer.anonymize(h).text if h else "" for h in panel.column_headers
+            ]
             tables.append(
                 Table(
                     table_id=f"T_{page_no}_{i:02d}",
                     caption_anonymized=None,
                     cells=cells,
+                    column_headers=headers,
                     bbox=None,
                 )
             )
