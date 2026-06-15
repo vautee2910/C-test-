@@ -6,7 +6,7 @@ columns under multi-line headers); no document-specific constants in the code.
 
 from __future__ import annotations
 
-from fsx.extract.anlagenspiegel import (
+from fsx.hgb.anlagenspiegel import (
     anlagenspiegel_facts,
     classify_column,
     reconstruct_anlagenspiegel,

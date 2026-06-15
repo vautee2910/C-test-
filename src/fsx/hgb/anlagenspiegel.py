@@ -22,10 +22,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from ..hgb.concepts import normalise_label
+from ..extract.numbers import is_de_number, parse_de_number
+from ..extract.tables import Word, cluster_rows, detect_value_columns, merge_number_fragments
 from ..schemas import Fact, StatementType
-from .numbers import is_de_number, parse_de_number
-from .tables import Word, cluster_rows, detect_value_columns, merge_number_fragments
+from .concepts import normalise_label
 
 # Canonical movements, in priority order. Each maps to the keywords that must all
 # be present in a column's (normalised) header phrase. Order matters: more

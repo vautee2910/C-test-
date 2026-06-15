@@ -12,12 +12,27 @@ person or related company).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Protocol
 
 import fitz
 
-from ..anonymize.engine import Anonymizer
 from .tables import LineItem, ReconstructedTable, Word, reconstruct_tables
+
+
+class _Anonymized(Protocol):  # pragma: no cover - typing only
+    text: str
+
+
+class LabelAnonymizer(Protocol):  # pragma: no cover - typing only
+    """Anything able to anonymise a label string.
+
+    Duck-typed so this generic package never imports :mod:`fsx.anonymize` (or any
+    particular anonymiser): pass :class:`fsx.anonymize.Anonymizer`, your own
+    engine, or ``None`` to skip anonymisation entirely when reusing this module
+    elsewhere.
+    """
+
+    def anonymize(self, text: str) -> _Anonymized: ...
 
 
 def words_from_page(page) -> list[Word]:
@@ -41,7 +56,11 @@ def words_from_page(page) -> list[Word]:
     return words
 
 
-def _anonymize_table(table: ReconstructedTable, anonymizer: Anonymizer) -> ReconstructedTable:
+def _anonymize_table(
+    table: ReconstructedTable, anonymizer: Optional[LabelAnonymizer]
+) -> ReconstructedTable:
+    if anonymizer is None:
+        return table
     items = [
         LineItem(
             label=anonymizer.anonymize(it.label).text if it.label else "",
@@ -56,15 +75,16 @@ def _anonymize_table(table: ReconstructedTable, anonymizer: Anonymizer) -> Recon
 def extract_tables(
     path: str | Path,
     *,
-    anonymizer: Anonymizer,
+    anonymizer: Optional[LabelAnonymizer] = None,
     pages: Optional[list[int]] = None,
 ) -> dict[int, list[ReconstructedTable]]:
-    """Reconstruct anonymised tables per page of a PDF.
+    """Reconstruct tables per page of a PDF, optionally anonymising labels.
 
     Returns a mapping of 1-indexed page number -> list of reconstructed panels
     (AKTIVA/PASSIVA etc.). ``pages`` optionally restricts to specific 1-indexed
-    pages. The same ``anonymizer`` should be shared with the rest of the
-    document so pseudonyms stay consistent.
+    pages. Pass an ``anonymizer`` (any object with ``anonymize(str).text``) to
+    pseudonymise labels — share the same one across the document so pseudonyms
+    stay consistent — or leave it ``None`` to get the raw reconstructed tables.
     """
     result: dict[int, list[ReconstructedTable]] = {}
     with fitz.open(path) as doc:
