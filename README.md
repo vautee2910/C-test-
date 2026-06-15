@@ -1,24 +1,49 @@
 # Local financial-statement extraction & anonymisation pipeline
 
 On-premise pipeline to extract German annual financial statements
-(Jahresabschlüsse) from PDFs, anonymise them locally, store normalised
-financial facts, and compare year-over-year — so that only a **minimised,
-anonymised** data pack is ever sent to an external LLM, never the original PDF.
+(Jahresabschlüsse) from PDFs, anonymise them locally, normalise the numbers into
+canonical HGB **facts**, reconcile them, and compare year-over-year — so that
+only a **minimised, anonymised** fact pack is ever sent to an external LLM, never
+the original PDF.
 
 ```
-PDF 2022 / 2023 / 2024
-        ↓  local PDF / OCR / layout extraction   (Docling, PyMuPDF, pdfplumber, Camelot, OCRmyPDF)
-text blocks + tables + page/coordinate refs
-        ↓  local entity detection & anonymisation (Presidio + spaCy de + regex + dictionaries)
-normalised statement structure                  (JSON + Parquet, SQLite/DuckDB)
-        ↓
-comparison · ratios · anomaly flags · LLM analysis (only on anonymised facts)
+PDF (born-digital or scan)
+        ↓  OCR gate (scan → searchable) + PyMuPDF parsing        fsx.parsing
+        ↓  local anonymisation: detectors → spans → pseudonyms   fsx.anonymize   [reusable]
+        ↓  geometry: words → rows → panels → value columns       fsx.extract     [reusable]
+        ↓  HGB concepts → Facts (+ reconciliation)               fsx.hgb
+        ↓  derived metrics · ratios · YoY · anomaly flags        fsx.analysis
+AnalysisReport (facts + features + reconciliation issues)  →  host engine stores / sends
 ```
+
+The core is light (PyMuPDF + Pydantic) and CPU-only. OCR (OCRmyPDF/Tesseract)
+and the statistical NER detector (spaCy) are optional, fully-local add-ons.
+Docling/torch are used only by the experimental `scripts/docling_smoke.py`, not
+by the core pipeline.
 
 ## Status
 
-Bootstrapping the **document-parsing layer** with [Docling](https://github.com/docling-project/docling),
-CPU-only.
+Working, test-covered pipeline (**227 tests**, offline) validated end-to-end on
+two real statements — one born-digital, one scanned. The three data levels (raw
+extraction → normalised `Fact`s → `AnalysisReport`) are in place, with OCR,
+page-rotation handling, two-up balance-sheet splitting, reconciliation, and a
+deterministic content-based `fact_id` for idempotent downstream storage.
+
+**`fsx.extract` and `fsx.anonymize` are deliberately domain-free and reusable**
+in other applications — enforced by `tests/test_modularity.py`. See
+[CLAUDE.md](CLAUDE.md) for the architecture, invariants, and current state, and
+`docs/` for per-layer detail
+([extraction](docs/level2-extraction.md),
+[analysis](docs/level3-analysis.md),
+[OCR & detectors](docs/ocr-and-model-detectors.md),
+[modularity](docs/modularity.md)).
+
+Persistence is intentionally **out of scope** for this package: it returns
+Pydantic contracts; the host engine owns SQL/storage and upserts by `fact_id`.
+
+```bash
+.venv/bin/python -m pytest -q          # run the suite
+```
 
 ## Network requirements (Claude Code on the web)
 

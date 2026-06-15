@@ -39,6 +39,24 @@ DATEV-Bericht (2 Jahre): 70 Features. `bilanzsumme` nachgebaut = berichtete
 Summe (2.740.484,63). Radar meldete u. a. Verbindlichkeiten ggü.
 Kreditinstituten +34,4 %.
 
+## Qualitäts-Layer: Reconciliation im Report
+
+`fsx.analysis.analyze_facts()` / `analyze_pdf()` liefern statt einer nackten
+Feature-Liste einen `AnalysisReport(features, issues)`: `build_features()` bleibt
+ein reiner Transform, der Report fährt zusätzlich die Level-2-Plausibilitäts-
+prüfung (`fsx.hgb.reconcile`) mit und **taggt jedes betroffene Feature**
+(`quality_issue`). `report.ok` / `report.has_errors` fassen den Lauf zusammen.
+
+Geprüft wird (nur gemeldet, nie verändert):
+- **Wertkonflikte** (`error`): dasselbe Konzept/Jahr mehrfach mit abweichendem
+  Betrag — fängt OCR-Ziffernfehler, die die „erster gewinnt"-Auflösung sonst
+  verschluckt.
+- **Gebrochene Identitäten** (`warning`): gemeldete Summe ≠ Σ Komponenten
+  (Bilanzsumme, Gesamtleistung = Umsatz + Bestandsveränderung, Personal-/
+  Materialaufwand) — nur wenn Summe und genug Komponenten vorliegen.
+- **Niedrige Konfidenz** (`info`): Facts unter `review_confidence` (Default 0,7)
+  — Teil-Absicherung gegen Fehler, die sich nicht duplizieren.
+
 ## Grenze
 
 Deltas brauchen ≥ 2 Jahre. Ein Einzelabschluss mit Geschäftsjahr **und**
