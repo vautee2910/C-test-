@@ -102,6 +102,19 @@ def test_account_numbers_not_flagged_as_phone(text):
     assert not any(lbl == Label.PHONE for lbl, _ in found), text
 
 
+def test_number_dense_statistics_block_keeps_all_figures():
+    # A whole reconstructed statistics row block (space-grouped thousands, some
+    # interior groups starting with "0") must yield zero PII spans — no figure
+    # may be eaten by the contact regexes. Mirrors the Destatis Jahrbuch ch. 9.4.
+    block = (
+        "Beschäftigte 2 076 909 60 437 33 411\n"
+        "Anlagevermögen 1 093 098 162 152 41 408\n"
+        "dar. weiblich 1 048 546 30 725 9 666\n"
+        "Bilanzsumme 1 954 173 190 215 46 636"
+    )
+    assert _labels(block) == set()
+
+
 def test_bare_domain_not_regex_detected():
     # "stpfl.EU" and friends must not be flagged; bare domains are dictionary-only.
     found = _labels("Der stpfl.EU Hinweis und and.EU Text")

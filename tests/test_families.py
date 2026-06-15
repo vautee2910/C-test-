@@ -74,6 +74,25 @@ def test_classify_segments_is_per_page_for_heterogeneous_documents():
     assert segs[2].family == "unknown" and not segs[2].qualifies
 
 
+def test_classify_segments_score_separates_statement_from_prose_mention():
+    # A statement-dense page scores high; a glossary/prose page that merely
+    # *mentions* a couple of HGB terms scores at the floor. Both may pass the
+    # low document-level min_markers, so a per-segment host must threshold on the
+    # raw score, not on `qualifies` alone — this locks that contract in.
+    statement = (
+        "Bilanz Gewinn- und Verlustrechnung Umsatzerlöse Anlagevermögen "
+        "Umlaufvermögen Sachanlagen Rückstellungen Jahresüberschuss"
+    )
+    prose = (
+        "Glossar. Abschreibungen bezeichnen die Wertminderung des "
+        "Anlagevermögens über die Nutzungsdauer."
+    )
+    seg_stmt, seg_prose = classify_segments([statement, prose])
+    assert seg_stmt.score >= 6
+    assert seg_prose.score <= 2
+    assert seg_stmt.score > seg_prose.score
+
+
 def test_registry_is_reloadable_from_yaml():
     fresh = load_registry()
     assert {f.name for f in fresh.families} == {f.name for f in REGISTRY.families}
