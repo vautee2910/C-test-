@@ -97,11 +97,12 @@ def test_models_disabled_by_default_adds_no_detector():
 def test_spacy_detector_wired_when_enabled():
     captured = {}
 
-    def fake_loader(model, *, enabled_labels=None, min_length=2):
+    def fake_loader(model, *, enabled_labels=None, min_length=2, stopwords=None):
         captured["model"] = model
         captured["labels"] = enabled_labels
         captured["min_length"] = min_length
-        return SpacyNerDetector(_FakeNlp(), enabled_labels=enabled_labels)
+        captured["stopwords"] = stopwords
+        return SpacyNerDetector(_FakeNlp(), enabled_labels=enabled_labels, stopwords=stopwords)
 
     cfg = {
         "models": {
@@ -118,6 +119,8 @@ def test_spacy_detector_wired_when_enabled():
     assert captured["model"] == "de_core_news_lg"
     assert captured["labels"] == {Label.COMPANY}
     assert captured["min_length"] == 3
+    # Domain stopwords are injected so the NER never redacts statement headings.
+    assert "bilanz" in captured["stopwords"] and "aktiva" in captured["stopwords"]
     assert len(eng.detectors) == 3  # dict + regex + spacy
 
     res = eng.anonymize("Globex SE expandiert")

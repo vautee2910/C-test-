@@ -137,6 +137,36 @@ def _parse_labels(values: Any) -> set[Label] | None:
     return labels or None
 
 
+# Financial-statement vocabulary that a German NER model routinely mis-tags as a
+# company, person or location (statement/section headings, structural words,
+# units). Injected into the spaCy detector so it never redacts these — keeping
+# the generic anonymiser free of domain knowledge. Matched on the whole entity
+# surface (case/whitespace-insensitive), so a real company name that merely
+# *contains* one of these words is unaffected.
+_DEFAULT_NER_STOPWORDS: frozenset[str] = frozenset({
+    # statements / sections
+    "bilanz", "aktiva", "passiva", "aktivseite", "passivseite",
+    "gewinn- und verlustrechnung", "gewinn und verlustrechnung", "guv",
+    "anlagenspiegel", "entwicklung des anlagevermögens", "jahresabschluss",
+    "jahresabschlussauswertungen", "anhang", "lagebericht", "kontennachweis",
+    "bescheinigung", "vermerk", "kapitalflussrechnung", "eigenkapitalspiegel",
+    "inhaltsverzeichnis", "auftrag", "anlagen",
+    # balance-sheet / P&L positions
+    "anlagevermögen", "umlaufvermögen", "eigenkapital", "verbindlichkeiten",
+    "rückstellungen", "rechnungsabgrenzungsposten", "gesamtleistung",
+    "umsatzerlöse", "jahresüberschuss", "jahresfehlbetrag", "bilanzgewinn",
+    "bilanzsumme", "sachanlagen", "finanzanlagen",
+    # structural words / units
+    "blatt", "seite", "summe", "übertrag", "davon", "vortrag",
+    "geschäftsjahr", "vorjahr", "eur", "euro", "tsd", "mio",
+})
+
+
+def _ner_stopwords(spacy_cfg: dict[str, Any]) -> set[str]:
+    extra = spacy_cfg.get("stopwords") or []
+    return set(_DEFAULT_NER_STOPWORDS) | {str(w) for w in extra}
+
+
 def _build_model_detectors(
     config: dict[str, Any],
     *,
@@ -158,6 +188,7 @@ def _build_model_detectors(
         spacy_cfg.get("model", "de_core_news_lg"),
         enabled_labels=_parse_labels(spacy_cfg.get("labels")),
         min_length=int(spacy_cfg.get("min_length", 2)),
+        stopwords=_ner_stopwords(spacy_cfg),
     )
     return [detector]
 

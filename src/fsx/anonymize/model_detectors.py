@@ -53,6 +53,26 @@ def _group_id(label: Label, surface: str) -> str:
     return f"{label.value}:{norm}"
 
 
+# A run of at least two letters (Unicode, so umlauts count) — a real word.
+_ALPHA_RUN = re.compile(r"[^\W\d_]{2,}", re.UNICODE)
+# A bare enumerator standing alone: "I.", "II.", "a)", "1." — structural noise
+# that German statements are full of and that spaCy loves to mis-tag as a name.
+_ENUM_ONLY = re.compile(r"^(?:[ivxlcdm]+|[a-z]|\d+)[.):]*$", re.IGNORECASE)
+
+
+def _is_structural_noise(surface: str) -> bool:
+    """True for surfaces that cannot be a person/org/location name.
+
+    Domain-neutral: drops pure punctuation/numbers and lone enumerators. This is
+    about *shape*, not vocabulary — keeping the detector reusable. Vocabulary
+    stop-words (e.g. statement headings) are supplied separately by the caller.
+    """
+    s = surface.strip()
+    if not _ALPHA_RUN.search(s):
+        return True
+    return bool(_ENUM_ONLY.match(s))
+
+
 class SpacyNerDetector:
     """Emit :class:`PiiSpan`s from a spaCy NER pipeline.
 
@@ -65,6 +85,10 @@ class SpacyNerDetector:
         enabled_labels: optional allow-list of canonical labels to keep.
         min_length: discard entity surfaces shorter than this (drops stray
             single-character NER noise).
+        stopwords: surfaces to never emit (case/whitespace-insensitive). The
+            caller injects domain vocabulary here — e.g. statement headings like
+            "Bilanz"/"Aktiva" that the model otherwise mis-tags as a company —
+            so the detector itself stays domain-free.
         source: provenance tag recorded on every span.
     """
 
@@ -75,12 +99,14 @@ class SpacyNerDetector:
         label_map: dict[str, Label] | None = None,
         enabled_labels: Iterable[Label] | None = None,
         min_length: int = 2,
+        stopwords: Iterable[str] | None = None,
         source: str = "spacy",
     ) -> None:
         self._nlp = nlp
         self.label_map = dict(label_map) if label_map is not None else dict(DEFAULT_SPACY_LABEL_MAP)
         self.enabled_labels = set(enabled_labels) if enabled_labels is not None else None
         self.min_length = min_length
+        self.stopwords = {re.sub(r"\s+", " ", w).strip().casefold() for w in (stopwords or ())}
         self.source = source
 
     @classmethod
@@ -91,6 +117,7 @@ class SpacyNerDetector:
         label_map: dict[str, Label] | None = None,
         enabled_labels: Iterable[Label] | None = None,
         min_length: int = 2,
+        stopwords: Iterable[str] | None = None,
         source: str = "spacy",
     ) -> "SpacyNerDetector":
         """Load a local spaCy model and wrap it. Imports ``spacy`` lazily.
@@ -119,6 +146,7 @@ class SpacyNerDetector:
             label_map=label_map,
             enabled_labels=enabled_labels,
             min_length=min_length,
+            stopwords=stopwords,
             source=source,
         )
 
@@ -135,6 +163,10 @@ class SpacyNerDetector:
                 continue
             surface = ent.text.strip()
             if len(surface) < self.min_length:
+                continue
+            if _is_structural_noise(surface):
+                continue
+            if re.sub(r"\s+", " ", surface).casefold() in self.stopwords:
                 continue
             spans.append(
                 PiiSpan(

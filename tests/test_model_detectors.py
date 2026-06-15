@@ -85,6 +85,31 @@ def test_unmapped_and_short_entities_are_dropped():
     assert det.detect("A MISC-Term appears") == []
 
 
+def test_structural_noise_enumerators_are_dropped():
+    # German statements are full of "I.", "II.", "a)" enumerators that spaCy
+    # loves to mis-tag as a person/org. They must never become PII.
+    nlp = _FakeNlp([("I.", "PER"), ("II.", "PER"), ("a)", "ORG"), ("1.", "LOC")])
+    det = SpacyNerDetector(nlp)
+    assert det.detect("I. II. a) 1.") == []
+
+
+def test_stopwords_drop_domain_vocabulary():
+    # Statement headings the model mis-tags as a company must be suppressed when
+    # injected as stopwords — case- and whitespace-insensitive.
+    nlp = _FakeNlp([("Bilanz", "ORG"), ("AKTIVA", "ORG"), ("Globex SE", "ORG")])
+    det = SpacyNerDetector(nlp, stopwords=["bilanz", "aktiva"])
+    spans = det.detect("Bilanz AKTIVA Globex SE")
+    assert [s.text for s in spans] == ["Globex SE"]  # only the real company survives
+
+
+def test_stopword_does_not_suppress_company_that_merely_contains_it():
+    # The match is on the whole surface, so "Aktiva Verwaltungs GmbH" survives.
+    nlp = _FakeNlp([("Aktiva Verwaltungs GmbH", "ORG")])
+    det = SpacyNerDetector(nlp, stopwords=["aktiva"])
+    spans = det.detect("Die Aktiva Verwaltungs GmbH meldet.")
+    assert [s.text for s in spans] == ["Aktiva Verwaltungs GmbH"]
+
+
 def test_enabled_labels_filter():
     nlp = _FakeNlp([("Max Mustermann", "PER"), ("Globex SE", "ORG")])
     det = SpacyNerDetector(nlp, enabled_labels={Label.PERSON})
