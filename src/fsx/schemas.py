@@ -149,3 +149,7 @@ class AnalysisFeature(BaseModel):
     delta_abs_vs_prev_year: Optional[float] = None
     delta_pct_vs_prev_year: Optional[float] = None
     flag: Optional[FeatureFlag] = None
+    # Set when a reconciliation issue (see fsx.hgb.reconcile) touches this
+    # metric/year — e.g. the underlying fact was extracted with conflicting
+    # values or low confidence. Advisory; the value is still reported.
+    quality_issue: Optional[str] = None

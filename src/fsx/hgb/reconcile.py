@@ -59,14 +59,18 @@ DEFAULT_IDENTITIES: tuple[IdentityCheck, ...] = (
 class ReconciliationIssue(BaseModel):
     """One flagged inconsistency. Advisory — facts are never changed."""
 
-    kind: str  # "conflicting_value" | "broken_identity"
-    severity: str  # "error" | "warning"
+    kind: str  # "conflicting_value" | "broken_identity" | "low_confidence"
+    severity: str  # "error" | "warning" | "info"
     company_id: str
     fiscal_year: int
     concept: str
     message: str
     values: list[float] = []
     pages: list[int] = []
+
+
+# Sort order so the most actionable issues surface first.
+_SEVERITY_RANK = {"error": 0, "warning": 1, "info": 2}
 
 
 def _effective(fact: Fact) -> float:
@@ -158,21 +162,52 @@ def _broken_identities(
     return issues
 
 
+def _low_confidence(
+    facts: list[Fact], review_confidence: float
+) -> list[ReconciliationIssue]:
+    issues: list[ReconciliationIssue] = []
+    for f in facts:
+        if f.confidence >= review_confidence:
+            continue
+        page = f"p{f.source_page}" if f.source_page is not None else "?"
+        issues.append(
+            ReconciliationIssue(
+                kind="low_confidence",
+                severity="info",
+                company_id=f.company_id,
+                fiscal_year=f.fiscal_year,
+                concept=f.concept,
+                message=(
+                    f"{f.concept} ({f.fiscal_year}) = {_effective(f):,.2f} matched "
+                    f"with low confidence {f.confidence:.2f} on {page} — review."
+                ),
+                values=[round(_effective(f), 2)],
+                pages=[f.source_page] if f.source_page is not None else [],
+            )
+        )
+    return issues
+
+
 def reconcile_facts(
     facts: list[Fact],
     *,
     rel_tol: float = 0.005,
     abs_tol: float = 1.0,
+    review_confidence: float = 0.7,
     identities: tuple[IdentityCheck, ...] = DEFAULT_IDENTITIES,
 ) -> list[ReconciliationIssue]:
     """Return inconsistencies found across a company's extracted Facts.
 
     ``rel_tol`` / ``abs_tol`` set the match tolerance (an amount differs only if
     it is off by more than both ``abs_tol`` and ``rel_tol`` of the larger value).
-    The result is empty when everything reconciles. Ordered errors-first, then by
-    year and concept for stable output.
+    ``review_confidence`` surfaces facts matched below that confidence as
+    ``info`` issues — a partial guard against OCR/extraction errors that do *not*
+    happen to duplicate elsewhere (set to ``0`` to disable). The result is empty
+    when everything reconciles, ordered by severity, then year and concept.
     """
     issues = _conflicting_values(facts, rel_tol, abs_tol)
     issues += _broken_identities(facts, identities, rel_tol, abs_tol)
-    issues.sort(key=lambda i: (i.severity != "error", i.fiscal_year, i.concept))
+    if review_confidence > 0:
+        issues += _low_confidence(facts, review_confidence)
+    issues.sort(key=lambda i: (_SEVERITY_RANK.get(i.severity, 9), i.fiscal_year, i.concept))
     return issues

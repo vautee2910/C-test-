@@ -10,6 +10,7 @@ from .metrics import (
     DerivedMetric,
     Ratio,
 )
+from .report import AnalysisReport, analyze_facts, analyze_pdf
 
 __all__ = [
     "build_features",
@@ -19,4 +20,7 @@ __all__ = [
     "Ratio",
     "DEFAULT_DERIVED",
     "DEFAULT_RATIOS",
+    "AnalysisReport",
+    "analyze_facts",
+    "analyze_pdf",
 ]

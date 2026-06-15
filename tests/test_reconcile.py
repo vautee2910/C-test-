@@ -110,3 +110,22 @@ def test_custom_identity_respected():
     ident = (IdentityCheck("total", ("a", "b"), min_components=2),)
     issues = reconcile_facts(facts, identities=ident)
     assert [i.concept for i in issues] == ["total"]
+
+
+def test_low_confidence_fact_flagged_as_info():
+    facts = [
+        Fact(fact_id="x", company_id="C1", fiscal_year=2024, concept="soziale_abgaben",
+             value=100.0, confidence=0.5, source_page=11),
+    ]
+    issues = reconcile_facts(facts)
+    assert len(issues) == 1
+    assert issues[0].kind == "low_confidence"
+    assert issues[0].severity == "info"
+
+
+def test_low_confidence_check_can_be_disabled():
+    facts = [
+        Fact(fact_id="x", company_id="C1", fiscal_year=2024, concept="umsatzerloese",
+             value=100.0, confidence=0.5),
+    ]
+    assert reconcile_facts(facts, review_confidence=0.0) == []
