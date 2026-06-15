@@ -50,7 +50,11 @@ DEFAULT_IDENTITIES: tuple[IdentityCheck, ...] = (
         ("summe_anlagevermoegen", "summe_umlaufvermoegen", "rechnungsabgrenzungsposten_aktiv"),
         min_components=2,
     ),
-    IdentityCheck("gesamtleistung", ("umsatzerloese", "bestandsveraenderung"), min_components=1),
+    # Requires *both* operands: when only Umsatz is present the line may hide a
+    # Bestandsveränderung (esp. a "Verminderung"/decrease) we did not capture, so
+    # Gesamtleistung != Umsatz is then expected, not an error. Only flag when both
+    # are known and still disagree.
+    IdentityCheck("gesamtleistung", ("umsatzerloese", "bestandsveraenderung"), min_components=2),
     IdentityCheck("personalaufwand", ("loehne_gehaelter", "soziale_abgaben"), min_components=1),
     IdentityCheck("materialaufwand", ("aufwand_rhb", "aufwand_bezogene_leistungen"), min_components=1),
 )

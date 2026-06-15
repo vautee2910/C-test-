@@ -66,14 +66,26 @@ def test_scale_is_applied_before_comparison():
 
 
 def test_broken_gesamtleistung_identity_flagged():
+    # Both operands present and they still disagree -> flag.
     facts = [
         _fact("umsatzerloese", 1_208_447.55),
+        _fact("bestandsveraenderung", 50_000.00),
         _fact("gesamtleistung", 731_476.36),
     ]
     issues = reconcile_facts(facts)
     assert [i.kind for i in issues] == ["broken_identity"]
     assert issues[0].severity == "warning"
     assert issues[0].concept == "gesamtleistung"
+
+
+def test_gesamtleistung_not_flagged_when_only_umsatz_present():
+    # Real case: Gesamtleistung 731.476,36 = Umsatz 1.208.447,55 minus a
+    # Bestandsverminderung we did not capture -> must NOT be a false positive.
+    facts = [
+        _fact("umsatzerloese", 1_208_447.55),
+        _fact("gesamtleistung", 731_476.36),
+    ]
+    assert [i.kind for i in reconcile_facts(facts)] == []
 
 
 def test_identity_not_checked_when_components_missing():
@@ -97,7 +109,8 @@ def test_satisfied_identity_produces_no_issue():
 def test_errors_sort_before_warnings():
     facts = [
         _fact("umsatzerloese", 1000.0, page=1),
-        _fact("gesamtleistung", 5000.0, page=1),  # broken identity (warning)
+        _fact("bestandsveraenderung", 100.0, page=1),
+        _fact("gesamtleistung", 5000.0, page=1),  # 5000 != 1100 -> warning
         _fact("abschreibungen", 100.0, page=1),
         _fact("abschreibungen", 200.0, page=2),  # conflicting (error)
     ]
