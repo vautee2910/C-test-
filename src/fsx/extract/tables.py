@@ -78,6 +78,9 @@ _NUM_HEAD = re.compile(r"^-?\d{1,3}(?:\.\d{3})*$")
 _NUM_TAIL = re.compile(r"^\d{3}(?:,\d+)?-?$")
 # Lone dash tokens used as a leading minus sign (bank reports use an en dash).
 _DASHES = {"-", "‐", "‑", "‒", "–", "—", "−"}
+# At least one (Unicode) letter — a real panel label, not a dash placeholder
+# ("-,--", "( -)") or a bare figure. Used to qualify a panel-gutter candidate.
+_HAS_LETTER = re.compile(r"[^\W\d_]", re.UNICODE)
 
 
 def merge_number_fragments(row: list[Word], max_gap: float = 6.0) -> list[Word]:
@@ -167,9 +170,11 @@ def find_column_gutters(
     A panel gutter is distinguished from an ordinary label-to-value gap by what
     sits on either side: across a true gutter the left word is the *end of a
     value column* (a number) and the right word is the *start of the next
-    panel's label* (text). A label-to-value gap is the opposite (text then
-    number), so it is ignored — which also means single-column pages are never
-    split. A gutter is accepted only if this pattern appears (at roughly the
+    panel's label* — real text *with a letter*, not a dash placeholder (``-,--``,
+    ``( -)``) or a bare figure, so a lone prior-year value column (common on bank
+    sheets, separated by dashes) is never mistaken for a second panel. A
+    label-to-value gap is the opposite (text then number), so it is ignored —
+    which also means single-column pages are never split. A gutter is accepted only if this pattern appears (at roughly the
     same x) in at least ``max(min_support_count, min_support * n_rows)`` rows —
     by consensus — so a single heading bridging the gutter does not hide it, nor
     a couple of stray gaps invent one. The absolute floor matters because many
@@ -194,7 +199,12 @@ def find_column_gutters(
     for row in rows:
         for a, b in zip(row, row[1:]):
             gap = b.x0 - a.x1
-            if gap >= min_gap and is_de_number(a.text) and not is_de_number(b.text):
+            if (
+                gap >= min_gap
+                and is_de_number(a.text)
+                and not is_de_number(b.text)
+                and _HAS_LETTER.search(b.text)
+            ):
                 candidates.append((a.x1 + b.x0) / 2)
 
     if not candidates:

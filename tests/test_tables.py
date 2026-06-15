@@ -62,6 +62,22 @@ def test_single_gutter_detected_between_panels():
     assert 595 < gutters[0] < 645  # between AKTIVA values and PASSIVA labels
 
 
+def test_dash_separated_prior_column_is_not_a_panel():
+    # Bank sheets put the prior-year column far right, separated by dash
+    # placeholders ("-,--"). Those are not labels, so the page must stay ONE
+    # panel — otherwise the prior column gets stranded and the subtotal column is
+    # mistaken for the prior year.
+    rows = cluster_rows([
+        _w(50, 200, 100, "Kassenbestand"),
+        _w(300, 400, 100, "25.982.656,30"), _w(700, 740, 100, "17.150"),
+        _w(50, 200, 120, "Guthaben"),
+        _w(300, 400, 120, "10.104.936,96"), _w(690, 700, 120, "-,--"),
+        _w(50, 200, 140, "Forderungen"),
+        _w(300, 400, 140, "221.366.433,98"), _w(690, 700, 140, "-"),
+    ])
+    assert find_column_gutters(rows) == []
+
+
 def test_misaligned_two_up_panels_split_on_few_candidates():
     # Real two-up balance sheets often print AKTIVA and PASSIVA with a different
     # number of lines, so the sides drift and only a couple of rows carry the
