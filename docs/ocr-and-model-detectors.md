@@ -85,6 +85,33 @@ pip install ocrmypdf
 Ohne diese Binaries liefert `OcrMyPdfBackend.is_available()` `False`; wird dann
 ein Scan eingereicht, hebt `ensure_searchable_pdf()` einen klaren `OcrError`.
 
+### OCR-Qualität: optionale Stellschrauben (per Default aus)
+Das Backend kennt drei Genauigkeits-Knöpfe, die `default_backend()` aus der
+Umgebung liest (keine Code-Änderung nötig):
+
+| Env-Variable | Wirkung |
+| --- | --- |
+| `FSX_TESSDATA_DIR` | Tesseract-Datenverzeichnis (z. B. `tessdata_best` LSTM-Modelle) statt der System-Daten; wird für die Dauer des Aufrufs als `TESSDATA_PREFIX` gesetzt und danach wieder entfernt. Das Verzeichnis muss die `configs`/`tessconfigs`-Hilfsdateien enthalten, nicht nur `*.traineddata`. |
+| `FSX_TESSERACT_OEM` | OCR-Engine-Modus (`1` = nur LSTM). |
+| `FSX_OCR_OVERSAMPLE` | Ziel-DPI, auf die Seitenbilder vor dem OCR hochgesampelt werden. |
+
+```bash
+# tessdata_best (deu/eng) holen und mit den System-Konfigs zusammenführen:
+mkdir tessbest && cp -r /usr/share/tesseract-ocr/5/tessdata/* tessbest/
+curl -sL -o tessbest/deu.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/deu.traineddata
+curl -sL -o tessbest/eng.traineddata https://github.com/tesseract-ocr/tessdata_best/raw/main/eng.traineddata
+export FSX_TESSDATA_DIR="$PWD/tessbest" FSX_TESSERACT_OEM=1
+```
+
+**Warum aus by default:** Auf beiden echten Testbelegen hat bereits `force_ocr`
+allein jede Seite zurückgeholt und die Zahlen korrekt gelesen; `tessdata_best`
+verbesserte die End-zu-End-Extraktion *nicht* messbar (eher etwas geringerer
+Recall), und `oversample` störte das Layout (verlor auf dem Test-Scan die
+komplette GuV) bei ~2,5× Laufzeit. Die Sicherheit gegen verbleibende OCR-Fehler
+liefert stattdessen die Plausibilitätsprüfung (`fsx.hgb.reconcile`). Die Knöpfe
+bleiben für Korpora verfügbar, auf denen sie nachweislich helfen — **vorher
+messen.**
+
 ---
 
 ## 2. Modellbasierte Detektoren (`fsx.anonymize.model_detectors`)

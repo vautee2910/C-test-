@@ -23,10 +23,12 @@ lazily inside the backend so the parsing package keeps loading without it.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Iterator, Optional, Protocol
 
 from .text_layer import has_text_layer
 
@@ -63,6 +65,29 @@ class OcrOutcome:
     reason: str
 
 
+@contextlib.contextmanager
+def _tessdata_prefix(tessdata_dir: Optional[str]) -> Iterator[None]:
+    """Temporarily point Tesseract at ``tessdata_dir`` via ``TESSDATA_PREFIX``.
+
+    OCRmyPDF spawns Tesseract as a subprocess, which reads ``TESSDATA_PREFIX``
+    from the environment; setting it only for the duration of the call avoids
+    leaking the override to the rest of the process. A ``None`` directory leaves
+    the environment (and thus the system data) untouched.
+    """
+    if not tessdata_dir:
+        yield
+        return
+    previous = os.environ.get("TESSDATA_PREFIX")
+    os.environ["TESSDATA_PREFIX"] = str(tessdata_dir)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("TESSDATA_PREFIX", None)
+        else:
+            os.environ["TESSDATA_PREFIX"] = previous
+
+
 class OcrMyPdfBackend:
     """OCR backend built on OCRmyPDF + Tesseract — entirely local.
 
@@ -82,6 +107,20 @@ class OcrMyPdfBackend:
       text" and silently passes through, so those pages reach the parser with no
       usable text. Forcing OCR avoids that data loss. ``force_ocr`` wins if both
       are set.
+
+    Optional OCR-quality knobs (all off by default — on the real test documents
+    ``force_ocr`` alone already recovered every page and read the figures
+    correctly, and turning these on did *not* improve end-to-end extraction;
+    they are exposed so they can be enabled per corpus where they do help):
+
+    * ``tessdata_dir`` — a Tesseract data directory to use instead of the system
+      one (e.g. the ``tessdata_best`` LSTM models). Exported to the OCR subprocess
+      as ``TESSDATA_PREFIX`` for the duration of the call; must contain the
+      ``configs``/``tessconfigs`` support files, not just ``*.traineddata``.
+    * ``tesseract_oem`` — Tesseract OCR-engine mode (1 = LSTM only).
+    * ``oversample`` — resample page images to at least this DPI before OCR.
+      Helps low-DPI scans in principle, but can disturb layout — measure before
+      enabling.
     """
 
     def __init__(
@@ -90,6 +129,9 @@ class OcrMyPdfBackend:
         language: str = "deu+eng",
         skip_text: bool = True,
         force_ocr: bool = False,
+        tessdata_dir: Optional[str] = None,
+        tesseract_oem: Optional[int] = None,
+        oversample: int = 0,
         deskew: bool = False,
         rotate_pages: bool = False,
         optimize: int = 0,
@@ -99,6 +141,9 @@ class OcrMyPdfBackend:
         self.language = language
         self.skip_text = skip_text
         self.force_ocr = force_ocr
+        self.tessdata_dir = tessdata_dir
+        self.tesseract_oem = tesseract_oem
+        self.oversample = oversample
         self.deskew = deskew
         self.rotate_pages = rotate_pages
         self.optimize = optimize
@@ -129,19 +174,24 @@ class OcrMyPdfBackend:
         dst.parent.mkdir(parents=True, exist_ok=True)
         # force_ocr and skip_text are mutually exclusive in OCRmyPDF; pass only
         # the selected one so the call never raises on a conflicting pair.
-        page_mode = {"force_ocr": True} if self.force_ocr else {"skip_text": self.skip_text}
+        kwargs: dict = {"force_ocr": True} if self.force_ocr else {"skip_text": self.skip_text}
+        if self.tesseract_oem is not None:
+            kwargs["tesseract_oem"] = self.tesseract_oem
+        if self.oversample:
+            kwargs["oversample"] = self.oversample
         try:
-            ocrmypdf.ocr(
-                str(src),
-                str(dst),
-                language=self.language,
-                deskew=self.deskew,
-                rotate_pages=self.rotate_pages,
-                optimize=self.optimize,
-                output_type=self.output_type,
-                progress_bar=self.progress_bar,
-                **page_mode,
-            )
+            with _tessdata_prefix(self.tessdata_dir):
+                ocrmypdf.ocr(
+                    str(src),
+                    str(dst),
+                    language=self.language,
+                    deskew=self.deskew,
+                    rotate_pages=self.rotate_pages,
+                    optimize=self.optimize,
+                    output_type=self.output_type,
+                    progress_bar=self.progress_bar,
+                    **kwargs,
+                )
         except Exception as exc:  # ocrmypdf raises a family of exceptions
             raise OcrError(f"OCRmyPDF failed on {src.name}: {exc}") from exc
         return dst
@@ -154,8 +204,23 @@ def default_backend() -> OcrBackend:
     :func:`ensure_searchable_pdf` *after* the document-level gate has already
     found no usable text layer, so re-OCRing every page is correct and dodges
     the ``skip_text`` phantom-text-layer trap (see :class:`OcrMyPdfBackend`).
+
+    The opt-in OCR-quality knobs default to *off* but can be enabled per corpus
+    without code changes via environment variables:
+
+    * ``FSX_TESSDATA_DIR`` — directory of alternative Tesseract data (e.g.
+      ``tessdata_best``);
+    * ``FSX_TESSERACT_OEM`` — OCR-engine mode (e.g. ``1`` for LSTM);
+    * ``FSX_OCR_OVERSAMPLE`` — target DPI to resample to before OCR.
     """
-    return OcrMyPdfBackend(force_ocr=True)
+    oem = os.environ.get("FSX_TESSERACT_OEM")
+    oversample = os.environ.get("FSX_OCR_OVERSAMPLE")
+    return OcrMyPdfBackend(
+        force_ocr=True,
+        tessdata_dir=os.environ.get("FSX_TESSDATA_DIR") or None,
+        tesseract_oem=int(oem) if oem else None,
+        oversample=int(oversample) if oversample else 0,
+    )
 
 
 def ensure_searchable_pdf(

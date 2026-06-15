@@ -155,12 +155,19 @@ def test_unavailable_backend_with_text_layer_is_fine(tmp_path: Path):
 
 
 def _capture_ocr_kwargs(monkeypatch) -> dict:
-    """Patch ``ocrmypdf.ocr`` to record its kwargs and write a stub PDF."""
+    """Patch ``ocrmypdf.ocr`` to record its kwargs and write a stub PDF.
+
+    Also records ``TESSDATA_PREFIX`` as seen *inside* the call, so tests can
+    assert it is set for the duration and restored afterwards.
+    """
+    import os
+
     ocrmypdf = pytest.importorskip("ocrmypdf")
     captured: dict = {}
 
     def fake_ocr(src, dst, **kw):
         captured.update(kw)
+        captured["_tessdata_prefix"] = os.environ.get("TESSDATA_PREFIX")
         Path(dst).write_bytes(b"%PDF-stub")
 
     monkeypatch.setattr(ocrmypdf, "ocr", fake_ocr)
@@ -191,6 +198,50 @@ def test_skip_text_default_passes_skip_text_not_force(tmp_path: Path, monkeypatc
     OcrMyPdfBackend().ocr_to_pdf(src, tmp_path / "out.pdf")
     assert captured.get("skip_text") is True
     assert "force_ocr" not in captured
+
+
+# --------------------------------------------------------------------------- #
+# Opt-in OCR-quality knobs (off by default)
+# --------------------------------------------------------------------------- #
+
+
+def test_quality_knobs_are_off_by_default(tmp_path: Path, monkeypatch):
+    captured = _capture_ocr_kwargs(monkeypatch)
+    src = tmp_path / "in.pdf"
+    src.write_bytes(b"%PDF")
+    OcrMyPdfBackend(force_ocr=True).ocr_to_pdf(src, tmp_path / "out.pdf")
+    assert "tesseract_oem" not in captured
+    assert "oversample" not in captured
+    assert captured["_tessdata_prefix"] is None
+
+
+def test_quality_knobs_passed_when_set(tmp_path: Path, monkeypatch):
+    captured = _capture_ocr_kwargs(monkeypatch)
+    src = tmp_path / "in.pdf"
+    src.write_bytes(b"%PDF")
+    OcrMyPdfBackend(
+        force_ocr=True, tesseract_oem=1, oversample=300, tessdata_dir="/opt/tessbest"
+    ).ocr_to_pdf(src, tmp_path / "out.pdf")
+    assert captured["tesseract_oem"] == 1
+    assert captured["oversample"] == 300
+    # TESSDATA_PREFIX is set during the call...
+    assert captured["_tessdata_prefix"] == "/opt/tessbest"
+    # ...and not leaked afterwards (was unset before).
+    import os
+
+    assert "TESSDATA_PREFIX" not in os.environ
+
+
+def test_default_backend_reads_quality_knobs_from_env(monkeypatch):
+    monkeypatch.setenv("FSX_TESSDATA_DIR", "/opt/tessbest")
+    monkeypatch.setenv("FSX_TESSERACT_OEM", "1")
+    monkeypatch.setenv("FSX_OCR_OVERSAMPLE", "300")
+    backend = default_backend()
+    assert isinstance(backend, OcrMyPdfBackend)
+    assert backend.force_ocr is True
+    assert backend.tessdata_dir == "/opt/tessbest"
+    assert backend.tesseract_oem == 1
+    assert backend.oversample == 300
 
 
 # --------------------------------------------------------------------------- #
