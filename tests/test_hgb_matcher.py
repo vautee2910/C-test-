@@ -98,14 +98,18 @@ def test_classify_document_family_and_concept_paths():
     assert classify_document_family(bank) == "bank"
     industrial = "Anlagevermögen Sachanlagen Umsatzerlöse Materialaufwand Personalaufwand"
     assert classify_document_family(industrial) == "hgb"
-    # A single incidental marker must not flip an industrial sheet to bank.
-    assert classify_document_family("Nur Zinserträge werden hier erwähnt.") == "hgb"
-    # Industrial sheets carry bank loans and interest too — these must stay hgb.
+    # Industrial sheets carry bank loans and interest too — these must stay hgb,
+    # not bank (driven by the distinctive HGB structure terms present).
     industrial_loans = (
+        "Bilanz Gewinn- und Verlustrechnung Umsatzerlöse Sachanlagen "
         "Verbindlichkeiten gegenüber Kreditinstituten 250.000,00 "
-        "Zinsen und ähnliche Aufwendungen Zinsaufwendungen 12.000,00 "
-        "Umsatzerlöse Sachanlagen Rückstellungen"
+        "Zinsen und ähnliche Aufwendungen Zinsaufwendungen 12.000,00"
     )
     assert classify_document_family(industrial_loans) == "hgb"
+    # Documents that look like no family are "unknown" (no guessing), and fall
+    # back to the base concepts only.
+    assert classify_document_family("Mietvertrag zwischen den Parteien.") == "unknown"
+    assert classify_document_family("Nur Zinserträge werden hier erwähnt.") == "unknown"
     assert DEFAULT_BANK_CONCEPTS in concept_paths_for_family("bank")
     assert DEFAULT_BANK_CONCEPTS not in concept_paths_for_family("hgb")
+    assert DEFAULT_BANK_CONCEPTS not in concept_paths_for_family("unknown")

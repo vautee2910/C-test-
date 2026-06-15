@@ -70,6 +70,12 @@ End-to-end entry points (each callable one layer lower too):
   words via `page.rotation_matrix` (landscape `/Rotate 90` balance sheets).
 - `src/fsx/hgb/concepts.py` + `config/hgb_concepts.yaml` — shared HGB concept
   synonyms / matcher (exact → prefix → optional fuzzy).
+- `src/fsx/hgb/families.py` + `config/families.yaml` — data-driven document-family
+  registry. Each family declares marker phrases, concept file(s) and a reconcile
+  set; classification scores markers, highest-`priority` qualifier wins (bank over
+  the generic hgb base), no match → `unknown` (base concepts, flagged). Add a new
+  document type as YAML, no code. `concepts.classify_document_family` /
+  `concept_paths_for_family` are thin wrappers over the registry.
 - `src/fsx/hgb/facts.py` — tables → `Fact`s: statement/section context, wrapped
   & hyphenated label rejoin, prior-year column rule, sign rules
   (Jahresfehlbetrag, Bestandsveränderung), Übertrag skip, orphan subtotals,
@@ -103,7 +109,7 @@ fixtures and the existing tests.
   `level3-analysis.md`, `ocr-and-model-detectors.md`, `modularity.md`,
   `network-allowlist.md`.
 
-## Current state (validated on two real statements: 1 born-digital, 1 scan)
+## Current state (validated on real statements: born-digital, scan, and a bank/RechKredV sheet)
 
 Done and tested:
 - OCR gate + `force_ocr` (recovers phantom-text-layer scans); page-rotation
@@ -114,7 +120,15 @@ Done and tested:
   Jahresfehlbetrag & Bestandsveränderung signs, orphan subtotals, nested
   sub-group suppression, deterministic `fact_id`.
 - Reconciliation (conflicts / identities / low-confidence) wired into Level-3
-  (`AnalysisReport`).
+  (`AnalysisReport`); **family-aware** — bank sheets use the bank identity set and
+  skip the HGB section-subtotal balance (their balance is enforced by the dual
+  `bilanzsumme` via the conflicting-value check).
+- **Document-family registry** (`families.py` + `config/families.yaml`):
+  `facts_from_pdf` classifies the document (`hgb` / `bank` / `unknown`) and loads
+  that family's concept set, instead of always merging HGB + bank. Industrial
+  sheets no longer see bank positions; bank sheets resolve with no caller config.
+  Per-period scale handles bank "Tsd. EUR" prior columns; the dash-separated
+  prior column no longer triggers a spurious panel split.
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
 - Anonymisation: dictionary + regex core, plus two optional, injectable model

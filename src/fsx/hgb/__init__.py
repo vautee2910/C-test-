@@ -7,9 +7,12 @@ from .concepts import (
     Concept,
     ConceptMatch,
     ConceptMatcher,
+    classify_document_family,
+    concept_paths_for_family,
     load_concepts,
     normalise_label,
 )
+from .families import REGISTRY, Family, FamilyRegistry, load_registry
 from .anlagenspiegel import (
     Anlagenspiegel,
     AnlagenRow,
@@ -32,8 +35,14 @@ __all__ = [
     "Concept",
     "ConceptMatch",
     "ConceptMatcher",
+    "classify_document_family",
+    "concept_paths_for_family",
     "load_concepts",
     "normalise_label",
+    "REGISTRY",
+    "Family",
+    "FamilyRegistry",
+    "load_registry",
     "facts_from_tables",
     "facts_from_pdf",
     "split_period_values",

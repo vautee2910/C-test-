@@ -1,0 +1,63 @@
+# Document-family registry — data-driven classification + concept selection.
+#
+# Anonymisation is universal (run before this). Only *domain extraction* is
+# family-specific: each family declares the marker phrases that identify it, the
+# concept knowledge base(s) it loads (a shared base + its specifics), and which
+# reconciliation rule set applies. Classification scores every family by how many
+# of its markers occur in the document; a family qualifies once it meets its
+# `min_markers`, and the highest-`priority` qualifying family wins — so a bank
+# sheet (which also reads like a generic HGB statement) resolves to `bank`, not
+# `hgb`. A document that qualifies for nothing is "unknown": extracted
+# best-effort with `unknown_concepts` and flagged so the host can review it.
+#
+# Add a new document type here (markers + concept file + reconcile set) — no code
+# change. Keep markers DISTINCTIVE: terms an unrelated document also carries
+# (e.g. a company's bank loan "Verbindlichkeiten gegenüber Kreditinstituten")
+# cause misclassification.
+
+default: hgb
+unknown_concepts: [hgb_concepts.yaml]   # best-effort base for unrecognised docs
+
+families:
+  # Industrial / general HGB annual statement — the base family. Its markers are
+  # the structural vocabulary common to (almost) every HGB Jahresabschluss.
+  - name: hgb
+    priority: 0
+    min_markers: 2
+    concepts: [hgb_concepts.yaml]
+    reconcile: hgb
+    markers:
+      - "Gewinn- und Verlustrechnung"
+      - "Umsatzerlöse"
+      - "Jahresüberschuss"
+      - "Jahresfehlbetrag"
+      - "Anlagevermögen"
+      - "Umlaufvermögen"
+      - "Sachanlagen"
+      - "Rückstellungen"
+      - "Bilanz"
+    # No signature_concepts: identified by the *absence* of a more specific
+    # family; reconciliation treats it (and "unknown") with the HGB rules.
+
+  # German bank annual statement (RechKredV / Formblatt 1 + 2). Loads the shared
+  # HGB base plus the bank-specific positions. signature_concepts let the
+  # reconciler recognise a bank from facts alone (no document text).
+  - name: bank
+    priority: 10
+    min_markers: 2
+    concepts: [hgb_concepts.yaml, bank_concepts.yaml]
+    reconcile: bank
+    markers:
+      - "Barreserve"
+      - "Forderungen an Kreditinstitute"
+      - "Forderungen an Kunden"
+      - "Verbindlichkeiten gegenüber Kunden"
+      - "Fonds für allgemeine Bankrisiken"
+      - "Treuhandvermögen"
+      - "Schuldverschreibungen und andere festverzinsliche Wertpapiere"
+    signature_concepts:
+      - barreserve
+      - forderungen_kreditinstitute
+      - forderungen_kunden
+      - verbindlichkeiten_kunden
+      - fonds_bankrisiken

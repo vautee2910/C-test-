@@ -62,28 +62,29 @@ DEFAULT_IDENTITIES: tuple[IdentityCheck, ...] = (
     IdentityCheck("materialaufwand", ("aufwand_rhb", "aufwand_bezogene_leistungen"), min_components=1),
 )
 
-# Bank statements (RechKredV) report no HGB-style section subtotals, so the
-# additive HGB identities never apply. Their balance is instead enforced by the
-# *dual* bilanzsumme: "Summe der Aktiva" and "Summe der Passiva" both normalise to
-# the ``bilanzsumme`` concept, so the generic conflicting-value check already
-# flags a sheet whose two sides disagree. We deliberately do NOT sum the
-# individual asset/liability positions — one missed position would raise a false
-# imbalance (precision over recall).
+# Reconciliation rule sets keyed by a family's ``reconcile`` name (see
+# config/families.yaml). Bank statements carry no HGB section subtotals, so they
+# use the (empty) bank identities and skip the HGB balance; their balance is
+# enforced by the dual bilanzsumme via the conflicting-value check. Fragile
+# "sum of all positions" identities are deliberately omitted — one missed
+# position would raise a false imbalance (precision over recall).
 BANK_IDENTITIES: tuple[IdentityCheck, ...] = ()
 
-# Concepts that occur only on bank sheets; their presence marks a fact set as a
-# bank statement. Excludes positions an industrial sheet also reports
-# (verbindlichkeiten_kreditinstitute is an HGB passiva component; Zinsen appear in
-# any GuV) so an industrial fact set is never mistaken for a bank one.
-_BANK_CONCEPTS = frozenset({
-    "barreserve", "forderungen_kreditinstitute", "forderungen_kunden",
-    "verbindlichkeiten_kunden", "fonds_bankrisiken",
-})
+_IDENTITIES_BY_FAMILY: dict[str, tuple[IdentityCheck, ...]] = {
+    "hgb": DEFAULT_IDENTITIES,
+    "bank": BANK_IDENTITIES,
+}
 
 
 def family_from_facts(facts: list[Fact]) -> str:
-    """``"bank"`` if any bank-specific concept is present, else ``"hgb"``."""
-    return "bank" if any(f.concept in _BANK_CONCEPTS for f in facts) else "hgb"
+    """Reconciliation family name inferred from the extracted concepts.
+
+    Delegates to the registry's signature-concept matching so the rule set tracks
+    ``config/families.yaml``; falls back to the base "hgb" rules.
+    """
+    from .families import REGISTRY
+
+    return REGISTRY.from_concepts({f.concept for f in facts}).name
 
 
 class ReconciliationIssue(BaseModel):
@@ -305,12 +306,16 @@ def reconcile_facts(
     references concepts a bank sheet never reports. Pass ``identities`` explicitly
     to override the family default.
     """
-    family = family_from_facts(facts)
+    from .families import REGISTRY
+
+    recon = REGISTRY.from_concepts({f.concept for f in facts}).reconcile
     if identities is None:
-        identities = BANK_IDENTITIES if family == "bank" else DEFAULT_IDENTITIES
+        identities = _IDENTITIES_BY_FAMILY.get(recon, DEFAULT_IDENTITIES)
     issues = _conflicting_values(facts, rel_tol, abs_tol)
     issues += _broken_identities(facts, identities, rel_tol, abs_tol)
-    if family != "bank":
+    # The HGB section-subtotal balance references concepts only an HGB sheet
+    # reports; other families (e.g. bank) validate the balance differently.
+    if recon == "hgb":
         issues += _bilanz_balance(facts, rel_tol, abs_tol)
     if review_confidence > 0:
         issues += _low_confidence(facts, review_confidence)
