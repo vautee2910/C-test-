@@ -41,6 +41,29 @@ def test_detect_scale():
     assert detect_scale("(30) Eigenkapital €  31.12.2025") == 1
 
 
+def test_detect_period_scales_uniform_and_asymmetric():
+    from fsx.hgb.facts import detect_period_scales
+    # Uniform: both columns share the scale.
+    assert detect_period_scales("Aktiva in Millionen €", 2025) == (1_000_000, 1_000_000)
+    assert detect_period_scales("EUR EUR  2.740.484,63", 2025) == (1, 1)
+    assert detect_period_scales("in Tausend Euro  1.234,5", 2025) == (1_000, 1_000)
+    # Asymmetric bank sheet: current in full euro, prior in Tsd. EUR.
+    bank = "Aktivseite  Euro Euro Euro  Tsd. EUR  25.982.656,30  17.150"
+    assert detect_period_scales(bank, 2024) == (1, 1_000)
+
+
+def test_prior_year_scale_can_differ_from_current():
+    matcher = ConceptMatcher.from_yaml()
+    tables = {3: [_table([LineItem("II. Sachanlagen", [None, 1000.0, 50.0], y=1)])]}
+    facts = facts_from_tables(
+        tables, company_id="C1", fiscal_year=2025, matcher=matcher,
+        statement_by_page={3: "bilanz"}, scale_by_page={3: 1}, prior_scale_by_page={3: 1000},
+    )
+    cur = next(f for f in facts if f.fiscal_year == 2025)
+    prev = next(f for f in facts if f.fiscal_year == 2024)
+    assert cur.scale == 1 and prev.scale == 1000
+
+
 def test_scale_applied_to_facts():
     matcher = ConceptMatcher.from_yaml()
     tables = {3: [_table([LineItem("III. Finanzanlagen", [None, 39487.0, 39593.0], y=1)])]}

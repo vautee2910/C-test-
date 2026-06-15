@@ -163,6 +163,7 @@ def facts_from_tables(
     emit_prior_year: bool = True,
     statement_by_page: Optional[dict[int, str]] = None,
     scale_by_page: Optional[dict[int, int]] = None,
+    prior_scale_by_page: Optional[dict[int, int]] = None,
     has_prior_by_page: Optional[dict[int, bool]] = None,
     min_confidence: float = 0.5,
 ) -> list[Fact]:
@@ -177,11 +178,18 @@ def facts_from_tables(
     """
     statement_by_page = statement_by_page or {}
     scale_by_page = scale_by_page or {}
+    prior_scale_by_page = prior_scale_by_page or {}
     has_prior_by_page = has_prior_by_page or {}
     facts: list[Fact] = []
     for page in sorted(tables_by_page):
         statement = statement_by_page.get(page)
-        scale = scale_by_page.get(page, 1)
+        cur_scale = scale_by_page.get(page, 1)
+        # The prior year may use a different scale (bank sheets: current full
+        # euro, prior in Tsd.); default it to the current scale.
+        period_scale = {
+            fiscal_year: cur_scale,
+            fiscal_year - 1: prior_scale_by_page.get(page, cur_scale),
+        }
         has_prior = has_prior_by_page.get(page, True)
         panels = tables_by_page[page]
         for ti, table in enumerate(panels):
@@ -310,7 +318,7 @@ def facts_from_tables(
                         concept=match.concept,
                         value=value,
                         currency=currency,
-                        scale=scale,
+                        scale=period_scale.get(year, cur_scale),
                         sign=-1 if value < 0 else 1,
                         source_page=page,
                         source_table=source_table,
@@ -401,6 +409,28 @@ def detect_scale(page_text: str) -> int:
     return 1
 
 
+# A large, full-precision euro amount (>= ~1 Mio, written with thousands groups
+# and cents, e.g. "25.982.656,30"). Its presence means the *current* column is
+# in full euro even when a scaled unit ("Tsd. EUR") heads the prior column.
+_HAS_FULL_EURO = re.compile(r"\d{1,3}(?:\.\d{3}){2,},\d{2}")
+
+
+def detect_period_scales(page_text: str, fiscal_year: int) -> tuple[int, int]:
+    """Return ``(current_scale, prior_scale)`` for a page.
+
+    Most sheets use one scale for both columns. German bank balance sheets
+    (RechKredV), however, print the current year in *full* euro and the prior
+    year in *Tsd. EUR* — an asymmetric layout a single page scale cannot express.
+    When a scaled unit is present *and* the page also shows large full-precision
+    euro amounts, the current column is full euro (scale 1) and only the prior
+    column carries the scale; otherwise both columns share the detected scale.
+    """
+    scaled = detect_scale(page_text)
+    if scaled != 1 and _HAS_FULL_EURO.search(page_text):
+        return (1, scaled)
+    return (scaled, scaled)
+
+
 def facts_from_pdf(
     path: str | Path,
     *,
@@ -431,6 +461,7 @@ def facts_from_pdf(
     # pages that have no heading of their own.
     statement_by_page: dict[int, Optional[str]] = {}
     scale_by_page: dict[int, int] = {}
+    prior_scale_by_page: dict[int, int] = {}
     prior_by_page: dict[int, bool] = {}
     current: Optional[str] = None
     with fitz.open(path) as doc:
@@ -445,7 +476,9 @@ def facts_from_pdf(
                 if heading_stmt is not None:
                     current = heading_stmt
             statement_by_page[index] = current
-            scale_by_page[index] = detect_scale(text)
+            cur_scale, prior_scale = detect_period_scales(text, fiscal_year)
+            scale_by_page[index] = cur_scale
+            prior_scale_by_page[index] = prior_scale
             prior_by_page[index] = detect_has_prior_year(text, fiscal_year)
 
     tables = extract_tables(path, anonymizer=anonymizer, pages=pages)
@@ -456,5 +489,6 @@ def facts_from_pdf(
         matcher=matcher,
         statement_by_page=statement_by_page,
         scale_by_page=scale_by_page,
+        prior_scale_by_page=prior_scale_by_page,
         has_prior_by_page=prior_by_page,
     )
