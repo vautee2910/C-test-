@@ -332,6 +332,13 @@ def _dominant_heading(page) -> str:
         for line in block.get("lines", []):
             for span in line.get("spans", []):
                 text = span["text"].strip()
+                # A heading carries letters. Ignore pure rules / underscores /
+                # numbers that an OCR pass can render as an oversized stray glyph
+                # ("_" at a larger font than the title) — otherwise such an
+                # artifact is picked as the "dominant" heading and masks the real
+                # statement title (observed on a scanned GuV summary page).
+                if not any(c.isalpha() for c in text):
+                    continue
                 if text and span["bbox"][1] < height * 0.55:
                     spans.append((round(span["size"], 1), span["bbox"][1], text))
     if not spans:

@@ -33,6 +33,29 @@ def test_detect_statement_bare_aktiva_passiva_band_is_bilanz():
     assert detect_statement("AKTIVA PASSIVA") == "bilanz"
 
 
+def test_detect_statement_guv_survives_ocr_dropped_und():
+    # OCR font jitter can drop the small "und" span from "GEWINN- UND
+    # VERLUSTRECHNUNG"; the GuV-specific "verlustrechnung" title still matches.
+    assert detect_statement("GEWINN- VERLUSTRECHNUNG Geschäftsjahr Vorjahr") == "guv"
+
+
+def test_dominant_heading_ignores_oversized_ocr_artifact():
+    # A scanned page can carry a stray oversized "_" (a rule the OCR rendered as a
+    # large glyph). It must not mask the real, smaller statement title.
+    import fitz
+
+    from fsx.hgb.facts import _dominant_heading
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 60), "Gewinn- und Verlustrechnung", fontsize=11)
+    page.insert_text((72, 200), "_", fontsize=20)  # larger, but not a heading
+    heading = _dominant_heading(page)
+    doc.close()
+    assert "Verlustrechnung" in heading
+    assert detect_statement(heading) == "guv"
+
+
 def test_detect_scale():
     assert detect_scale("Aktiva in Millionen €") == 1_000_000
     assert detect_scale("Mio. €  2025  2024") == 1_000_000
