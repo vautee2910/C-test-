@@ -175,7 +175,12 @@ Done and tested:
   statement vocabulary) and `PrivacyFilterDetector` (openai/privacy-filter ONNX,
   person/contact PII, no ORG). Both off by default, enabled via the `models`
   config section. The anonymiser targets *all* document types, not only
-  statements.
+  statements. Validated on the Jahrbuch front matter: with the privacy-filter
+  on, the pipeline reaches 8/8 PII (adds the 2 personal names the regex cannot
+  find). The model is context-sensitive — it misses names when fed a whole page
+  but catches them when fed per Level-1 block (which is how the pipeline runs);
+  its subword tokens could tag part of a word ("Ers" of "Erschienen"), so a
+  word-boundary guard (`_cuts_word`) drops spans that slice a word.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf

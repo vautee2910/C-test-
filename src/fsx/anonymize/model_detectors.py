@@ -88,6 +88,19 @@ def _is_structural_noise(surface: str) -> bool:
     return bool(_ENUM_ONLY.match(s))
 
 
+def _cuts_word(text: str, start: int, end: int) -> bool:
+    """True if ``[start:end)`` slices through a word (a sub-word fragment).
+
+    Subword-token models can tag only part of a word — e.g. labelling "Ers" of
+    "Erschienen" as a person, which would rewrite it to "[PERSON]chienen". A real
+    entity is bounded by non-letters, so reject a span whose immediate neighbour
+    on either side is a letter (precision over recall).
+    """
+    before = text[start - 1] if start > 0 else ""
+    after = text[end] if end < len(text) else ""
+    return before.isalpha() or after.isalpha()
+
+
 class SpacyNerDetector:
     """Emit :class:`PiiSpan`s from a spaCy NER pipeline.
 
@@ -349,7 +362,7 @@ class PrivacyFilterDetector:
             if self.enabled_labels is not None and label not in self.enabled_labels:
                 continue
             surface = text[start:end]
-            if _is_structural_noise(surface):
+            if _is_structural_noise(surface) or _cuts_word(text, start, end):
                 continue
             if re.sub(r"\s+", " ", surface).casefold() in self.stopwords:
                 continue

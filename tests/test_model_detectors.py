@@ -251,6 +251,16 @@ def test_privacy_detector_new_b_starts_a_second_entity():
     assert [s.text for s in spans] == ["Anna", "Berta"]
 
 
+def test_privacy_detector_drops_subword_fragments():
+    # The subword model tags "Ers" of "Erschienen" as a person; emitting it would
+    # rewrite the word to "[PERSON]chienen". A span that cuts a word is rejected.
+    text = "Erschienen im Oktober"
+    tokens = [("S-private_person", 0, 3)]  # "Ers", followed by "chienen"
+    assert _pf(tokens).detect(text) == []
+    # A whole word at the same position is kept (word-boundary on both sides).
+    assert [s.text for s in _pf([("S-private_person", 0, 3)]).detect("Ers Mustermann")] == ["Ers"]
+
+
 def test_privacy_detector_respects_enabled_labels_and_stopwords():
     text = "Max in Bilanz"
     tokens = [
