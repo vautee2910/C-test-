@@ -180,14 +180,24 @@ Known/deferred (be honest about these):
   default. `parsing/table_backends.py` adds a `TableExtractor` protocol (mirrors
   `OcrBackend`) + a scorer (precision/recall/F1 vs a ground-truth cell set) and
   `scripts/bench_tables.py` so an alternative (docling/camelot/VLM) is *measured*
-  before adoption, never swapped into the core. Validated: geometry recovers a
-  real born-digital Bilanz/GuV at ~100% (20 facts, reconcile clean). docling is
-  wired as an optional backend but **does not import** in the lean CPU env
-  (docling 2.102.1 eagerly loads a vision-LLM chart stage that breaks on
-  transformers 5.x/4.57 `AutoProcessor`) — `is_available()` self-skips it;
-  evaluating it needs a pinned transformers, which is exactly the cost the seam
-  is meant to expose. A cloud VLM is ruled out (raw page image would leave the
-  host, breaking the anonymise-before-egress invariant).
+  before adoption, never swapped into the core. Benchmarked head-to-head on a
+  **real born-digital Bilanz**: geometry 14/14 values (100%, instant) vs
+  **docling 10/14 (71%, ~19 s)** — docling caught the subtotals but dropped
+  individual line items, so on the *target* documents the lightweight geometry
+  pass is both more complete and far faster. Getting docling to run at all
+  exposed its cost (the point of the seam): a torchvision matched to torch (else
+  a `torchvision::nms` import error), a transformers it agrees with, and
+  `do_ocr=False` (its default pipeline pulls a RapidOCR model from a blocked host
+  even for born-digital PDFs). Keep it an *optional* backend for hard layouts,
+  not a core dep. A cloud VLM is ruled out (raw page image would leave the host,
+  breaking anonymise-before-egress).
+- **Scans / OCR validated end-to-end**: a 34-page image-only scan OCRs in ~27 s
+  (OCRmyPDF + Tesseract `deu`) and yields 49 facts at good digit quality;
+  reconciliation flags the review items — the documented safety net. A separate
+  precision gap surfaced: a **3-column Bilanz (inner amount + Geschäftsjahr +
+  Vorjahr)** confuses the current/prior split (the `>=4` matrix guard does not
+  catch 3 columns), giving a spurious `bilanz_imbalance` even though the printed
+  Bilanzsumme balances — candidate follow-up in `split_period_values`.
 - **Nested GuV sub-group totals** are *suppressed* rather than summed, because
   garbled OCR makes the sum unreliable; with clean OCR this becomes a sum.
 - **Persistence** is intentionally absent — the host engine writes SQL using the

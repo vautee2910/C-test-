@@ -89,10 +89,18 @@ class DoclingTableExtractor:
             return False
 
     def _convert(self, pdf_path: str | Path):  # pragma: no cover - heavy/optional
-        from docling.document_converter import DocumentConverter
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
 
         if self._converter is None:
-            self._converter = DocumentConverter()
+            # Born-digital statements already carry a text layer, so disable
+            # docling's OCR stage (it otherwise pulls a RapidOCR model from a
+            # blocked host); keep table-structure (TableFormer) on.
+            opts = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+            self._converter = DocumentConverter(
+                format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+            )
         return self._converter.convert(str(pdf_path)).document
 
     def extract(
