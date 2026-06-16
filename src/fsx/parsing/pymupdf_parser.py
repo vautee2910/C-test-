@@ -74,6 +74,14 @@ def _anonymize_cells(
     ``None`` cells become empty strings; every non-empty string is passed
     through ``anonymizer`` so pseudonyms stay consistent with the rest of the
     document. Factored out so table mapping can be tested without a real PDF.
+
+    The statistical-model detectors are skipped here (``use_models=False``):
+    statement / Kontennachweis cells are dense, low-PII concept labels where the
+    model is both slow (per-cell inference) and a precision risk (it mis-tags
+    position labels as names), while the precise dictionary + regex layers still
+    run. Prose text blocks — where person/contact PII actually lives — keep the
+    model. Trade-off: a name that appears *only* in a table cell is caught solely
+    by the dictionary/regex layers, not the model.
     """
     grid: list[list[str]] = []
     for row in rows:
@@ -82,7 +90,7 @@ def _anonymize_cells(
             if cell is None:
                 out_row.append("")
             else:
-                out_row.append(anonymizer.anonymize(cell).text)
+                out_row.append(anonymizer.anonymize(cell, use_models=False).text)
         grid.append(out_row)
     return grid
 
@@ -139,12 +147,19 @@ class PyMuPDFParser:
         for i, panel in enumerate(reconstruct_tables(words_from_page(page)), start=1):
             cells: list[list[str]] = []
             for item in panel.items:
-                label = self.anonymizer.anonymize(item.label).text if item.label else ""
+                # use_models=False: cell labels are dense statement vocabulary, not
+                # prose PII — skip the heavy model (speed + precision); the
+                # dictionary/regex layers still run. See _anonymize_cells.
+                label = (
+                    self.anonymizer.anonymize(item.label, use_models=False).text
+                    if item.label else ""
+                )
                 cells.append([_clean_label(label)] + [_format_value(v) for v in item.values])
             if not cells:
                 continue
             headers = [
-                self.anonymizer.anonymize(h).text if h else "" for h in panel.column_headers
+                self.anonymizer.anonymize(h, use_models=False).text if h else ""
+                for h in panel.column_headers
             ]
             tables.append(
                 Table(

@@ -77,3 +77,39 @@ def test_empty_text_is_noop():
     res = eng.anonymize("")
     assert res.text == ""
     assert res.replaced_count == 0
+
+
+class _FakeModelDetector:
+    """A model-flagged detector that redacts a fixed surface as a PERSON."""
+
+    is_model = True
+
+    def __init__(self, surface: str) -> None:
+        self._surface = surface
+
+    def detect(self, text: str):
+        from fsx.anonymize.spans import PiiSpan
+
+        i = text.find(self._surface)
+        if i < 0:
+            return []
+        return [PiiSpan(start=i, end=i + len(self._surface), label=Label.PERSON,
+                        text=self._surface, source="fake-model", entity_id="m:1", priority=0)]
+
+
+def test_use_models_false_skips_model_detectors_but_keeps_core():
+    # The model layer redacts "Mustermann"; the dictionary redacts "Muster GmbH".
+    eng = Anonymizer([
+        DictionaryDetector([DictionaryEntity("c0", Label.COMPANY, ["Muster GmbH"])]),
+        _FakeModelDetector("Mustermann"),
+    ])
+    text = "Mustermann bei Muster GmbH"
+    full = eng.anonymize(text)
+    assert "[PERSON_1]" in full.text and "[UNTERNEHMEN_1]" in full.text
+    # use_models=False: the model span is skipped, the dictionary hit still fires.
+    core = Anonymizer([
+        DictionaryDetector([DictionaryEntity("c0", Label.COMPANY, ["Muster GmbH"])]),
+        _FakeModelDetector("Mustermann"),
+    ]).anonymize(text, use_models=False)
+    assert "Mustermann" in core.text          # not redacted by the skipped model
+    assert "[UNTERNEHMEN_1]" in core.text      # dictionary layer still ran

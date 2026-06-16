@@ -68,12 +68,23 @@ class Anonymizer:
         self._mapping[token] = span.text
         return token
 
-    def anonymize(self, text: str) -> AnonymizationResult:
+    def anonymize(self, text: str, *, use_models: bool = True) -> AnonymizationResult:
+        """Anonymise ``text``, keeping pseudonyms consistent with prior calls.
+
+        ``use_models=False`` skips the heavy statistical-model detectors (those
+        flagged ``is_model``) for this call, keeping only the fast, precise
+        dictionary + regex layers. The token counters / mapping are shared either
+        way, so pseudonyms stay consistent across calls. Callers use this to keep
+        the slow, recall-oriented model off dense, low-PII inputs (e.g. statement
+        table cells) while still running it on prose blocks.
+        """
         if not text:
             return AnonymizationResult(text=text)
 
         raw_spans: list[PiiSpan] = []
         for detector in self.detectors:
+            if not use_models and getattr(detector, "is_model", False):
+                continue
             raw_spans.extend(detector.detect(text))
         spans = merge_spans(raw_spans)
 

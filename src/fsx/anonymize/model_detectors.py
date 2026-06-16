@@ -158,6 +158,10 @@ class SpacyNerDetector:
         source: provenance tag recorded on every span.
     """
 
+    # Statistical model layer: heavy (per-call inference) and recall-oriented.
+    # The engine can skip it on a per-call basis (e.g. on dense table cells).
+    is_model = True
+
     def __init__(
         self,
         nlp: Callable[[str], Any],
@@ -313,6 +317,10 @@ class PrivacyFilterDetector:
     dictionary/spaCy layers when company names matter. Least-trusted on overlap
     (:data:`PRIORITY_MODEL`), like the spaCy detector.
     """
+
+    # Statistical model layer: heavy (per-call inference) and recall-oriented.
+    # The engine can skip it on a per-call basis (e.g. on dense table cells).
+    is_model = True
 
     def __init__(
         self,
