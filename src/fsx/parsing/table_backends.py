@@ -69,12 +69,20 @@ class DoclingTableExtractor:
     downloads models on first use, so it is *opt-in* and self-reports
     availability; the adapter maps docling's cell grid onto the common
     :class:`ReconstructedTable` (first column = label, the rest parsed as values).
+
+    ``do_ocr`` selects docling's own OCR stage. It is off by default — born-digital
+    statements already carry a text layer, and docling's default OCR otherwise
+    pulls a model from a network host. Turn it **on** to run docling end-to-end on
+    a *scan* (image-only PDF), so it can be benchmarked head-to-head against our
+    OCRmyPDF→geometry path on the same raw scan. The backend reports its
+    :attr:`name` accordingly (``docling`` vs ``docling-ocr``) so the scorer keeps
+    the two modes apart.
     """
 
-    name = "docling"
-
-    def __init__(self) -> None:
+    def __init__(self, *, do_ocr: bool = False) -> None:
         self._converter = None
+        self._do_ocr = do_ocr
+        self.name = "docling-ocr" if do_ocr else "docling"
 
     def is_available(self) -> bool:
         # Probe the actual import path extract() needs, not just the top package:
@@ -94,10 +102,11 @@ class DoclingTableExtractor:
         from docling.document_converter import DocumentConverter, PdfFormatOption
 
         if self._converter is None:
-            # Born-digital statements already carry a text layer, so disable
-            # docling's OCR stage (it otherwise pulls a RapidOCR model from a
-            # blocked host); keep table-structure (TableFormer) on.
-            opts = PdfPipelineOptions(do_ocr=False, do_table_structure=True)
+            # Born-digital statements already carry a text layer, so OCR is off by
+            # default (docling's default OCR otherwise pulls a model from a network
+            # host); keep table-structure (TableFormer) on. For a scan, ``do_ocr``
+            # turns the OCR stage on so docling can run end-to-end on the image.
+            opts = PdfPipelineOptions(do_ocr=self._do_ocr, do_table_structure=True)
             self._converter = DocumentConverter(
                 format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
             )

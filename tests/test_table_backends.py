@@ -49,6 +49,15 @@ def test_docling_backend_availability_is_boolean_and_optional():
     assert isinstance(DoclingTableExtractor().is_available(), bool)
 
 
+def test_docling_ocr_mode_reports_a_distinct_name():
+    # do_ocr toggles docling's OCR stage for scans; the name must differ so a
+    # scorer keeps the born-digital and OCR runs apart. Neither construction
+    # imports the heavy dep (only extract() does).
+    assert DoclingTableExtractor().name == "docling"
+    assert DoclingTableExtractor(do_ocr=False).name == "docling"
+    assert DoclingTableExtractor(do_ocr=True).name == "docling-ocr"
+
+
 def test_score_counts_only_exact_cell_matches():
     truth = {(1, "a", 0): 100.0, (1, "b", 0): 200.0, (1, "c", 0): 300.0}
     extracted = {

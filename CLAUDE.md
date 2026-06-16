@@ -200,7 +200,17 @@ Known/deferred (be honest about these):
   `do_ocr=False` (its default pipeline pulls a RapidOCR model from a blocked host
   even for born-digital PDFs). Keep it an *optional* backend for hard layouts,
   not a core dep. A cloud VLM is ruled out (raw page image would leave the host,
-  breaking anonymise-before-egress).
+  breaking anonymise-before-egress). `DoclingTableExtractor(do_ocr=True)` adds a
+  scan path (reports `name="docling-ocr"`) so docling can be measured end-to-end
+  on an image-only PDF, not only born-digital. **Re-benchmarked on the real scan**
+  (Smart Site Solutions, Bilanz p21/22 + GuV p23, value-recall vs hand-verified
+  figures): geometry on the OCRmyPDF layer **70/79 = 88.6% (instant)** vs
+  **docling-OCR 67/79 = 84.8% (~196 s for 3 pages)** — so docling-OCR does *not*
+  catch up on real scans; it is both slower and slightly less complete. Both miss
+  the same closing grand totals (Bilanzsumme) and GuV group subtotals (handled in
+  the fact layer, not raw reconstruction); docling additionally drops a few line
+  items the geometry pass recovers. Geometry stays the default; docling stays an
+  optional, measured backend.
 - **Scans / OCR validated end-to-end**: a 34-page image-only scan OCRs in ~27 s
   (OCRmyPDF + Tesseract `deu`) and yields 49 facts at good digit quality;
   reconciliation flags the review items — the documented safety net. It first
