@@ -103,6 +103,23 @@ MONTHS_DE = (
 )
 
 # Order matters only for readability; overlaps are resolved by the engine.
+
+# Phone separators incl. thin space (U+2009) and (narrow) no-break space, which
+# German typesetting uses around the "/" between area code and subscriber
+# (e.g. "611 / 75 24 05"). Newline is deliberately excluded so a number
+# never spans a line break.
+_PHONE_WS = " \u00a0\u2009\u202f"
+_PHONE_SEP = _PHONE_WS + "/.()\\-"
+PHONE_RE = re.compile(
+    "(?<![\\d.,])(?:"
+    # 1. explicit +49/0049 trunk (optional "(0)") — strong, table-absent anchor,
+    #    so flexible 1+-digit grouping is safe.
+    f"(?:\\+49|0049)[{_PHONE_WS}]?(?:\\(0\\)[{_PHONE_WS}]?)?\\d{{1,5}}(?:[{_PHONE_SEP}]+\\d{{1,}})+"
+    # 2. domestic "0…" — strict, to avoid eating dense statement number columns.
+    "|(?<!\\d\\s)0[ ()/.\\-]?\\d{2,5}[ ()/.\\-]+\\d{3,}(?:[ ()/.\\-]*\\d)*"
+    ")"
+)
+
 REGEX_RULES: list[tuple[Label, re.Pattern[str]]] = [
     # HRB / HRA commercial register numbers.
     (Label.COMMERCIAL_REGISTER, re.compile(r"\bHR[AB]\s?\d{1,6}\b")),
@@ -116,16 +133,10 @@ REGEX_RULES: list[tuple[Label, re.Pattern[str]]] = [
     (Label.EMAIL, re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")),
     # Full URL.
     (Label.URL, re.compile(r"\bhttps?://[^\s<>()\"]+", re.IGNORECASE)),
-    # German phone numbers. Deliberately strict to avoid eating the dense
-    # number columns of a financial statement: separators must NOT span line
-    # breaks (no \s/\n); the leading trunk must not sit inside a formatted
-    # number (lookbehind rejects a preceding digit, "." or "," — so the "0" in
-    # "2.014.879,12" is not a phone start); the trunk must also not be a
-    # *space*-separated thousands continuation (the second lookbehind rejects a
-    # preceding "digit + whitespace", so the "076" in "2 076 909" is not a phone
-    # start); a real separator between area code and subscriber is required
-    # (rejecting contiguous account numbers like 0123456789); subscriber >=3.
-    (Label.PHONE, re.compile(r"(?<![\d.,])(?<!\d\s)(?:\+49|0049|0)[ ()/.\-]?\d{2,5}[ ()/.\-]+\d{3,}(?:[ ()/.\-]*\d)*")),
+    # German phone numbers — see PHONE_RE above (international "+49"/"0049" trunk
+    # with flexible grouping, or a strict domestic "0…" that will not eat the
+    # dense number columns of a statement).
+    (Label.PHONE, PHONE_RE),
     # PLZ + Ort (5-digit postal code + capitalised place name, same line only).
     (Label.ADDRESS, re.compile(r"\b\d{5}[ ]+[A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+(?:[ ][A-ZÄÖÜ][A-Za-zÄÖÜäöüß.\-]+){0,2}")),
     # Long German date, e.g. "15. März 2024".

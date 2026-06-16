@@ -157,11 +157,16 @@ Done and tested:
   mislabels caption/title fragments), so per precision-over-recall everything
   else stays positional (`[]`) and the host names columns itself. Document-type
   header semantics belong in a tuned extractor (cf. `anlagenspiegel`).
-- **Anonymiser number integrity**: the PHONE regex carries a second lookbehind
-  `(?<!\d\s)` so a space-separated thousands continuation ("2 076 909" → "076
-  909") is not eaten as a phone number — it kept corrupting figures in
-  number-dense statistics tables. Space-separated real phones ("0911 1234567")
-  still match.
+- **Anonymiser number integrity & phone coverage**: the PHONE regex (`PHONE_RE`
+  in `detectors.py`) is two alternatives — an explicit `+49`/`0049` (optionally
+  `(0)`) international trunk with flexible 1+-digit grouping incl. thin/no-break
+  space separators ("+49 (0) 611 / 75 24 05"), and a deliberately strict domestic
+  `0…` form. The domestic form carries a second lookbehind `(?<!\d\s)` so a
+  space-separated thousands continuation ("2 076 909" → "076 909") is not eaten
+  as a phone — it kept corrupting figures in number-dense statistics tables. On
+  the Jahrbuch front matter the anonymiser (regex-only) catches 6/8 PII (3
+  phone/fax, 2 addresses, 1 email); the 2 personal names need the opt-in spaCy
+  NER / known-entities dictionary (regex cannot find names by design).
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
 - Anonymisation: dictionary + regex core, plus two optional, injectable model

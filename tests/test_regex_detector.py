@@ -64,6 +64,11 @@ def test_enabled_labels_filters_others_out():
         "0049 911 1234567",
         "0231/9096-0",
         "030 12345678",
+        # International "+49 (0)" trunk with space-grouped subscriber (impressum
+        # style), incl. thin-space separators around the "/".
+        "+49 (0) 611 / 75 24 05",
+        "+49 (0) 3 82 04 / 6 65 43",
+        "+49 (0) 611 / 75 24 05",
     ],
 )
 def test_real_phone_numbers_detected(phone):
