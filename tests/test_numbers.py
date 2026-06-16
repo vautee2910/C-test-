@@ -24,6 +24,8 @@ from fsx.extract.numbers import (
         ("1.234,00-", -1234.00),  # DATEV trailing minus
         ("(1.234,00)", -1234.00),  # parentheses negative
         ("2.116.685", 2116685.0),  # grouped, no decimals
+        ("11.156,85.", 11156.85),  # OCR stray trailing dot on a decimal figure
+        ("47.890,00.", 47890.00),  # ditto — must not be lost into the label
     ],
 )
 def test_parse_de_number(token, expected):
@@ -40,6 +42,8 @@ def test_parse_de_number(token, expected):
         "II.",  # roman enumerator
         "Sachanlagen",  # label
         "",
+        "31.12.2023.",  # date + trailing dot: no comma -> still not money
+        "1.234.",  # thousands + trailing dot, no comma -> not stripped (enumerator-safe)
     ],
 )
 def test_non_numbers_rejected(token):

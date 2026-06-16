@@ -22,6 +22,20 @@ from typing import Optional
 _MONEY_RE = re.compile(r"^[-(]?\d{1,3}(?:\.\d{3})*(?:,\d+)?[-)]?$")
 
 
+def _strip_ocr_trailing_dot(token: str) -> str:
+    """Drop one stray trailing ``.`` OCR appends to a complete decimal figure.
+
+    Scans routinely render "11.156,85" as "11.156,85." (a sentence-like dot),
+    which otherwise fails money detection and gets absorbed into the row label —
+    losing the figure and, worse, letting the line inherit a group subtotal.
+    Only stripped when a decimal comma is present, so dates ("31.12.2023") and
+    section enumerators ("1.") — which carry no comma — are still rejected.
+    """
+    if token.endswith(".") and "," in token:
+        return token[:-1]
+    return token
+
+
 def is_de_number(token: str) -> bool:
     """True if ``token`` is a German-formatted monetary value.
 
@@ -29,7 +43,7 @@ def is_de_number(token: str) -> bool:
     numbers (``1.``), dates (``31.12.2023``) and bare years (``2023``) are
     excluded.
     """
-    token = token.strip()
+    token = _strip_ocr_trailing_dot(token.strip())
     if not token or not _MONEY_RE.match(token):
         return False
     return ("." in token) or ("," in token)
@@ -71,7 +85,7 @@ def parse_de_number(token: str) -> Optional[float]:
     Handles leading/trailing ``-`` and surrounding parentheses as negatives.
     Returns ``None`` for tokens that are not recognised as money.
     """
-    token = token.strip()
+    token = _strip_ocr_trailing_dot(token.strip())
     if not is_de_number(token):
         return None
     negative = token[:1] in "-(" or token[-1:] in "-)"

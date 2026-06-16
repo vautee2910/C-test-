@@ -193,11 +193,15 @@ Known/deferred (be honest about these):
   breaking anonymise-before-egress).
 - **Scans / OCR validated end-to-end**: a 34-page image-only scan OCRs in ~27 s
   (OCRmyPDF + Tesseract `deu`) and yields 49 facts at good digit quality;
-  reconciliation flags the review items — the documented safety net. A separate
-  precision gap surfaced: a **3-column Bilanz (inner amount + Geschäftsjahr +
-  Vorjahr)** confuses the current/prior split (the `>=4` matrix guard does not
-  catch 3 columns), giving a spurious `bilanz_imbalance` even though the printed
-  Bilanzsumme balances — candidate follow-up in `split_period_values`.
+  reconciliation flags the review items — the documented safety net. It first
+  raised a spurious `bilanz_imbalance`; the root cause was **not** the 3-column
+  layout (inner amount + Geschäftsjahr + Vorjahr, which parses correctly) but an
+  **OCR stray trailing dot**: a last sub-item's figure rendered as `11.156,85.`
+  failed money detection and was absorbed into the label, so the line inherited
+  its group subtotal and inflated the Passiva. Fixed in `extract/numbers.py`
+  (`_strip_ocr_trailing_dot`: tolerate one trailing `.` only when a decimal comma
+  is present, so dates/enumerators stay rejected); the scan now balances exactly
+  and the two figures are recovered.
 - **Nested GuV sub-group totals** are *suppressed* rather than summed, because
   garbled OCR makes the sum unreliable; with clean OCR this becomes a sum.
 - **Persistence** is intentionally absent — the host engine writes SQL using the
