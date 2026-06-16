@@ -176,6 +176,18 @@ Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
   surfacing) but not eliminated — the planned fix is a **remote GPU-OCR backend**
   plugged in behind the `OcrBackend` protocol.
+- **Table-extraction backends**: the geometry reconstruction is the precise CPU
+  default. `parsing/table_backends.py` adds a `TableExtractor` protocol (mirrors
+  `OcrBackend`) + a scorer (precision/recall/F1 vs a ground-truth cell set) and
+  `scripts/bench_tables.py` so an alternative (docling/camelot/VLM) is *measured*
+  before adoption, never swapped into the core. Validated: geometry recovers a
+  real born-digital Bilanz/GuV at ~100% (20 facts, reconcile clean). docling is
+  wired as an optional backend but **does not import** in the lean CPU env
+  (docling 2.102.1 eagerly loads a vision-LLM chart stage that breaks on
+  transformers 5.x/4.57 `AutoProcessor`) — `is_available()` self-skips it;
+  evaluating it needs a pinned transformers, which is exactly the cost the seam
+  is meant to expose. A cloud VLM is ruled out (raw page image would leave the
+  host, breaking the anonymise-before-egress invariant).
 - **Nested GuV sub-group totals** are *suppressed* rather than summed, because
   garbled OCR makes the sum unreliable; with clean OCR this becomes a sum.
 - **Persistence** is intentionally absent — the host engine writes SQL using the
