@@ -156,7 +156,12 @@ _DEFAULT_NER_STOPWORDS: frozenset[str] = frozenset({
     "anlagevermögen", "umlaufvermögen", "eigenkapital", "verbindlichkeiten",
     "rückstellungen", "rechnungsabgrenzungsposten", "gesamtleistung",
     "umsatzerlöse", "jahresüberschuss", "jahresfehlbetrag", "bilanzgewinn",
-    "bilanzsumme", "sachanlagen", "finanzanlagen",
+    "bilanzsumme", "sachanlagen", "finanzanlagen", "immaterielle",
+    "immaterielle vermögensgegenstände",
+    # Anlagenspiegel column/abbreviation vocabulary (mis-tagged on the
+    # Kontennachweis / Entwicklung des Anlagevermögens pages)
+    "ahk", "abschr", "abschreibung", "abschreibungen", "buchwert", "zugang",
+    "abgang", "umbuchung", "zuschreibung", "gwg", "gwg-sofort",
     # structural words / units
     "blatt", "seite", "summe", "übertrag", "davon", "vortrag",
     "geschäftsjahr", "vorjahr", "eur", "euro", "tsd", "mio",

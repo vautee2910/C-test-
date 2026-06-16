@@ -101,6 +101,44 @@ def _cuts_word(text: str, start: int, end: int) -> bool:
     return before.isalpha() or after.isalpha()
 
 
+# A leading structural enumerator ("B.", "I.", "1.", "a)") + trailing punctuation.
+# A NER model often tags a heading *with* its enumerator ("B. Umlaufvermögen") or
+# an abbreviation *with* its dot ("Abschr."), which a plain stopword equality test
+# misses. Folding these structural decorations away — shape only, no vocabulary —
+# lets one bare stopword ("umlaufvermögen") cover those forms too.
+_LEADING_ENUM = re.compile(r"^(?:[ivxlcdm]+|[a-z]|\d+)[.):\]]+\s+", re.IGNORECASE)
+_TRAILING_PUNCT = re.compile(r"[.,;:]+$")
+
+# Labels whose value is a proper noun — always capitalised in German. A span with
+# no uppercase letter cannot be one; it is general-language NER noise ("dabei", a
+# line-wrapped "gesetzli chen"), so drop it (precision over recall).
+_PROPER_NOUN_LABELS = frozenset({Label.PERSON, Label.COMPANY, Label.LOCATION})
+
+
+def _stopword_match(surface: str, stopwords: set[str]) -> bool:
+    """True if ``surface`` — or its enumerator/punctuation-stripped form — is a stopword.
+
+    Domain vocabulary is injected as bare words; this folds the structural
+    decorations a model tends to glue on (leading enumerator, trailing
+    punctuation) so a single bare stopword still matches. Purely structural, so
+    the detector stays domain-free.
+    """
+    if not stopwords:
+        return False
+    norm = re.sub(r"\s+", " ", surface).strip().casefold()
+    stripped = re.sub(r"\s+", " ", _LEADING_ENUM.sub("", surface)).strip().casefold()
+    candidates = {
+        norm, _TRAILING_PUNCT.sub("", norm),
+        stripped, _TRAILING_PUNCT.sub("", stripped),
+    }
+    return bool(candidates & stopwords)
+
+
+def _lacks_uppercase(surface: str) -> bool:
+    """True for an alphabetic surface that carries no uppercase letter."""
+    return any(c.isalpha() for c in surface) and not any(c.isupper() for c in surface)
+
+
 class SpacyNerDetector:
     """Emit :class:`PiiSpan`s from a spaCy NER pipeline.
 
@@ -194,7 +232,9 @@ class SpacyNerDetector:
                 continue
             if _is_structural_noise(surface):
                 continue
-            if re.sub(r"\s+", " ", surface).casefold() in self.stopwords:
+            if label in _PROPER_NOUN_LABELS and _lacks_uppercase(surface):
+                continue
+            if _stopword_match(surface, self.stopwords):
                 continue
             spans.append(
                 PiiSpan(
@@ -364,7 +404,9 @@ class PrivacyFilterDetector:
             surface = text[start:end]
             if _is_structural_noise(surface) or _cuts_word(text, start, end):
                 continue
-            if re.sub(r"\s+", " ", surface).casefold() in self.stopwords:
+            if label in _PROPER_NOUN_LABELS and _lacks_uppercase(surface):
+                continue
+            if _stopword_match(surface, self.stopwords):
                 continue
             spans.append(
                 PiiSpan(

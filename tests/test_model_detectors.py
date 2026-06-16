@@ -270,3 +270,39 @@ def test_privacy_detector_respects_enabled_labels_and_stopwords():
     ]
     spans = _pf(tokens, stopwords=["bilanz"], enabled_labels={Label.PERSON, Label.ADDRESS}).detect(text)
     assert [s.text for s in spans] == ["Max"]
+
+
+def test_stopword_folds_enumerator_and_trailing_punctuation():
+    # A model glues a heading's enumerator ("B. Umlaufvermögen") or an
+    # abbreviation's dot ("Abschr.") onto the surface; the bare stopword must
+    # still match after folding those structural decorations away.
+    nlp = _FakeNlp([
+        ("B. Umlaufvermögen", "PER"),
+        ("Abschr.", "ORG"),
+        ("Max Mustermann", "PER"),
+    ])
+    det = SpacyNerDetector(nlp, stopwords=["umlaufvermögen", "abschr"])
+    spans = det.detect("B. Umlaufvermögen Abschr. Max Mustermann")
+    assert [s.text for s in spans] == ["Max Mustermann"]
+
+
+def test_lowercase_proper_noun_is_dropped_as_noise():
+    # German proper nouns are capitalised; an all-lowercase PERSON/ORG/LOC span
+    # ("dabei", a line-wrapped "gesetzli chen") is general-language NER noise.
+    nlp = _FakeNlp([
+        ("dabei", "PER"),
+        ("gesetzli chen", "PER"),
+        ("Max Mustermann", "PER"),
+    ])
+    det = SpacyNerDetector(nlp)
+    spans = det.detect("dabei gesetzli chen Max Mustermann")
+    assert [s.text for s in spans] == ["Max Mustermann"]
+
+
+def test_privacy_detector_drops_lowercase_person_noise():
+    text = "dabei Burmester"
+    tokens = [
+        ("S-private_person", 0, 5),   # "dabei" -> lowercase, dropped
+        ("S-private_person", 6, 15),  # "Burmester" -> real name, kept
+    ]
+    assert [s.text for s in _pf(tokens).detect(text)] == ["Burmester"]
