@@ -119,7 +119,13 @@ Done and tested:
 - OCR gate + `force_ocr` (recovers phantom-text-layer scans); page-rotation
   normalisation; two-up panel split for misaligned AKTIVA/PASSIVA.
 - Statement/section detection incl. bare AKTIVA/PASSIVA bands and stacked
-  single-column balance sheets.
+  single-column balance sheets. `_dominant_heading` ignores letter-free spans
+  (an OCR rule/underscore can render larger than the title and mask it); the GuV
+  title set includes the OCR-jitter-robust `verlustrechnung` (the small `und` of
+  "GEWINN- UND VERLUSTRECHNUNG" can drop out of the font band). A scanned GuV
+  summary page is recognised even when it also has a Kontennachweis — the two
+  then cross-validate, and reconciliation flags a real OCR digit error between
+  them (precision over recall).
 - Fact rules: prior-year split, hyphenated/wrapped label rejoin, Übertrag skip,
   Jahresfehlbetrag & Bestandsveränderung signs, orphan subtotals, nested
   sub-group suppression, deterministic `fact_id`.
@@ -180,7 +186,24 @@ Done and tested:
   find). The model is context-sensitive — it misses names when fed a whole page
   but catches them when fed per Level-1 block (which is how the pipeline runs);
   its subword tokens could tag part of a word ("Ers" of "Erschienen"), so a
-  word-boundary guard (`_cuts_word`) drops spans that slice a word.
+  word-boundary guard (`_cuts_word`) drops spans that slice a word. Validated on
+  the e.V. Erstellungsbericht: it recovers every real person name (Steuerberater
+  + full Vorstand) but over-redacts statement structure as PERSON/ADDRESS. Two
+  more domain-free guards keep precision: `_stopword_match` folds a leading
+  enumerator ("B. Umlaufvermögen") and trailing punctuation ("Abschr.") before
+  the stopword test so one bare stopword covers the decorated forms, and an
+  all-lowercase PERSON/ORG/LOCATION span ("dabei", a wrapped "gesetzli chen") is
+  dropped (a German proper noun is capitalised); the default NER stopwords gained
+  the Anlagenspiegel/Kontennachweis vocabulary (immaterielle, AHK, Abschr., GWG,
+  Buchwert, …). Residual hits are only open-ended Kontennachweis asset names,
+  where conservative over-redaction is the safe direction for an anonymiser.
+  **Performance**: the model does per-call inference, so the parser runs it on
+  prose text blocks only and skips it on table cells (geometry-reconstructed and
+  `find_tables`) via `Anonymizer.anonymize(text, use_models=False)` — those cells
+  are dense, low-PII concept labels already present in the text blocks. Measured
+  ~2.8× faster on table-heavy pages (140→49.5 s; the shared token mapping keeps
+  pseudonyms consistent). Trade-off: a name only ever in a table cell is then
+  caught by the dictionary/regex layers, not the model.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
