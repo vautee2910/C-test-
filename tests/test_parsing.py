@@ -163,6 +163,52 @@ def test_anonymize_cells_replaces_none_and_anonymises():
     assert grid[1][2] == "Summe"
 
 
+class _FakeModelDetector:
+    """A model-flagged detector that redacts a fixed surface as a PERSON."""
+
+    is_model = True
+
+    def __init__(self, surface: str) -> None:
+        self._surface = surface
+
+    def detect(self, text):
+        from fsx.anonymize.labels import Label
+        from fsx.anonymize.spans import PiiSpan
+
+        i = text.find(self._surface)
+        if i < 0:
+            return []
+        return [PiiSpan(start=i, end=i + len(self._surface), label=Label.PERSON,
+                        text=self._surface, source="fake-model", entity_id="m:1", priority=0)]
+
+
+def test_anonymize_cells_runs_model_by_default_and_skips_when_opted_out():
+    # Default: the model scans cells too (precise) — a cell-only name is redacted.
+    anon = _make_anonymizer()
+    anon.detectors.append(_FakeModelDetector("Mustermann"))
+    rows = [["Mustermann", "Position"]]
+    assert _anonymize_cells(rows, anon)[0][0] == "[PERSON_1]"
+    # Opt-in fast path: model skipped on cells, so the name stays.
+    assert _anonymize_cells(rows, anon, use_models=False)[0][0] == "Mustermann"
+
+
+def test_parser_model_on_tables_default_is_precise(tmp_path: Path):
+    # A name only in a (reconstructed) table cell is redacted by default, but
+    # survives when the caller opts into the faster blocks-only path.
+    pdf = _make_pdf(tmp_path, [[(72, 100, "Mustermann"), (400, 100, "1.234")]])
+
+    def cell_text(parser):
+        doc = parser.parse(pdf, document_id="d", company_id="c", fiscal_year=2024)
+        return " ".join(c for pg in doc.pages for tb in pg.tables for row in tb.cells for c in row)
+
+    anon = _make_anonymizer()
+    anon.detectors.append(_FakeModelDetector("Mustermann"))
+    assert "[PERSON_1]" in cell_text(PyMuPDFParser(anon))                       # default precise
+    anon2 = _make_anonymizer()
+    anon2.detectors.append(_FakeModelDetector("Mustermann"))
+    assert "Mustermann" in cell_text(PyMuPDFParser(anon2, model_on_tables=False))  # opt-in fast
+
+
 def test_table_mapping_via_fake_table():
     """Exercise PyMuPDFParser._parse_tables with a fake find_tables() result."""
 

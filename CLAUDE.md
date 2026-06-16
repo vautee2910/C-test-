@@ -197,13 +197,18 @@ Done and tested:
   the Anlagenspiegel/Kontennachweis vocabulary (immaterielle, AHK, Abschr., GWG,
   Buchwert, …). Residual hits are only open-ended Kontennachweis asset names,
   where conservative over-redaction is the safe direction for an anonymiser.
-  **Performance**: the model does per-call inference, so the parser runs it on
-  prose text blocks only and skips it on table cells (geometry-reconstructed and
-  `find_tables`) via `Anonymizer.anonymize(text, use_models=False)` — those cells
-  are dense, low-PII concept labels already present in the text blocks. Measured
-  ~2.8× faster on table-heavy pages (140→49.5 s; the shared token mapping keeps
-  pseudonyms consistent). Trade-off: a name only ever in a table cell is then
-  caught by the dictionary/regex layers, not the model.
+  **Performance vs precision (opt-in)**: the model does per-call inference, so on
+  table-heavy pages scanning every cell dominates the cost. The **default is
+  precise** — the model scans table cells too (`PyMuPDFParser` /
+  `parse_pdf(..., model_on_tables=True)`), so a name appearing only in a cell is
+  still redacted. Pass `model_on_tables=False` to opt into the faster path: the
+  model then runs on prose text blocks only, and table cells (geometry-recon­structed
+  and `find_tables`) are anonymised by the dictionary + regex layers via
+  `Anonymizer.anonymize(text, use_models=False)` — those cells are dense, low-PII
+  concept labels already present in the text blocks. Measured ~2.8× faster on
+  table-heavy pages (140→49.5 s; the shared token mapping keeps pseudonyms
+  consistent either way). Trade-off of the fast path: a name only ever in a table
+  cell is then caught by the dictionary/regex layers, not the model.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
