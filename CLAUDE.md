@@ -239,7 +239,13 @@ Done and tested:
   re-touched). Validated on the e.V. letterhead: the footer name/address/phone/
   email are redacted in situ. OCR's own limit remains — a stylised logo or
   circular signature-stamp text it cannot read stays, so `remove_images` is the
-  guaranteed fallback for those marks. Both off by default.
+  guaranteed fallback for those marks. Both off by default. Two recall fixes feed
+  it: dictionary aliases match across whitespace/line breaks (a company name
+  wrapped in justified prose), and the engine now tracks **all** surface forms
+  (`Anonymizer.surface_tokens`, not just token→one surface), so every spelling of
+  an entity — a company's long *and* short name — is redacted, not only the first
+  one seen. The optional passes are reachable from the pipeline via
+  `parse_pdf(..., redacted_pdf_path=..., redacted_pdf_options={...})`.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
