@@ -210,3 +210,29 @@ def test_ocr_images_redacts_pii_inside_an_image(tmp_path: Path):
     tp = rp.get_textpage_ocr(full=False, language="eng")
     ocr_text = rp.get_text(textpage=tp)
     assert "Mustermann" not in ocr_text
+
+
+def test_parse_pdf_forwards_redacted_options(tmp_path: Path):
+    # redacted_pdf_options reaches write_anonymized_pdf — here remove_images.
+    from fsx.parsing import parse_pdf
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Kunde Muster Maschinenbau GmbH", fontsize=11)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 30, 15))
+    pix.clear_with(20)
+    page.insert_image(fitz.Rect(72, 200, 172, 240), pixmap=pix)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+
+    out = tmp_path / "red.pdf"
+    parse_pdf(
+        src, anonymizer=build_anonymizer(_CONFIG), document_id="d", company_id="c",
+        fiscal_year=2024, redacted_pdf_path=out,
+        redacted_pdf_options={"remove_images": True},
+    )
+    red = fitz.open(out)
+    text = "\n".join(p.get_text("text") for p in red)
+    assert "[UNTERNEHMEN_1]" in text          # text redaction still happened
+    assert len(red[0].get_images()) == 0       # option was forwarded

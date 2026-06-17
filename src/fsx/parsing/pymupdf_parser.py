@@ -248,6 +248,7 @@ def parse_pdf(
     source_filename: str | None = None,
     model_on_tables: bool = True,
     redacted_pdf_path: str | Path | None = None,
+    redacted_pdf_options: dict[str, Any] | None = None,
 ) -> RawDocument:
     """Parse a PDF into an anonymised Level-1 :class:`RawDocument`.
 
@@ -263,7 +264,10 @@ def parse_pdf(
     ``redacted_pdf_path``, when set, also writes an anonymised *copy of the PDF*
     there (same layout, PII replaced in place by the same tokens, metadata
     scrubbed). It reuses this run's anonymiser and the surfaces it already
-    detected, so no second model pass is needed.
+    detected, so no second text-detection pass is needed. ``redacted_pdf_options``
+    is forwarded as keyword arguments to
+    :func:`~fsx.parsing.redact.write_anonymized_pdf` to toggle the optional passes
+    (``remove_images``, ``ocr_images``, ``redact_signatures``, …).
     """
     parser = PyMuPDFParser(anonymizer, model_on_tables=model_on_tables)
     raw = parser.parse(
@@ -278,6 +282,7 @@ def parse_pdf(
 
         write_anonymized_pdf(
             path, redacted_pdf_path, anonymizer=anonymizer, detect=False,
+            **(redacted_pdf_options or {}),
         )
     return raw
 
@@ -295,6 +300,7 @@ def parse_pdf_with_ocr(
     ocr_output_path: str | Path | None = None,
     model_on_tables: bool = True,
     redacted_pdf_path: str | Path | None = None,
+    redacted_pdf_options: dict[str, Any] | None = None,
 ) -> RawDocument:
     """Parse a PDF, transparently OCR-ing it first **if** it is a scan.
 
@@ -331,6 +337,7 @@ def parse_pdf_with_ocr(
         source_filename=source_filename if source_filename is not None else path.name,
         model_on_tables=model_on_tables,
         redacted_pdf_path=redacted_pdf_path,
+        redacted_pdf_options=redacted_pdf_options,
     )
 
 
