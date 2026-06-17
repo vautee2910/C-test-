@@ -139,3 +139,27 @@ def test_multiword_surface_redacted_as_one_run(tmp_path: Path):
     text = fitz.open(dst)[0].get_text("text")
     assert "Mustermann" not in text and "Max " not in text
     assert "[PERSON_1]" in text
+
+
+def test_remove_images_blanks_embedded_images(tmp_path: Path):
+    # A letterhead/logo/stamp is an embedded image: text detectors cannot read
+    # it, so remove_images blanks it. Off by default (preserves figures).
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Bericht", fontsize=11)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 40, 20))
+    pix.clear_with(10)
+    page.insert_image(fitz.Rect(72, 200, 172, 250), pixmap=pix)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+
+    anon = build_anonymizer(_CONFIG)
+    kept = tmp_path / "kept.pdf"
+    write_anonymized_pdf(src, kept, anonymizer=anon, use_models=False)
+    assert len(fitz.open(kept)[0].get_images()) >= 1  # default keeps images
+
+    anon2 = build_anonymizer(_CONFIG)
+    removed = tmp_path / "removed.pdf"
+    write_anonymized_pdf(src, removed, anonymizer=anon2, use_models=False, remove_images=True)
+    assert len(fitz.open(removed)[0].get_images()) == 0  # opt-in removes them

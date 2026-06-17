@@ -208,6 +208,28 @@ def _redact_widgets_and_annots(page, surfaces: list[str], sig_index: list[int]) 
     return n
 
 
+def _blank_images(page) -> int:
+    """Cover every embedded raster image on ``page`` with a white redaction box.
+
+    In a financial statement an embedded image is almost always letterhead — a
+    firm logo, a footer with address/phone/email, or a signature stamp — i.e. PII
+    that *no* text detector can see (``get_text`` returns nothing for image
+    pixels). This is opt-in: it also removes any legitimate figure, so the caller
+    decides. ``apply_redactions`` (images=PIXELS) erases the covered pixels.
+    """
+    n = 0
+    seen: set = set()
+    for img in page.get_images(full=True):
+        xref = img[0]
+        if xref in seen:
+            continue
+        seen.add(xref)
+        for r in page.get_image_rects(xref):
+            page.add_redact_annot(r, fill=(1, 1, 1))
+            n += 1
+    return n
+
+
 def write_anonymized_pdf(
     src: str | Path,
     dst: str | Path,
@@ -216,6 +238,7 @@ def write_anonymized_pdf(
     use_models: bool = True,
     scrub_metadata: bool = True,
     redact_signatures: bool = True,
+    remove_images: bool = False,
     detect: bool = True,
 ) -> RedactionSummary:
     """Write an anonymised copy of ``src`` to ``dst`` and return a summary.
@@ -227,7 +250,11 @@ def write_anonymized_pdf(
     XMP metadata and embedded/attached files — PDF metadata routinely carries an
     author / internal title. ``redact_signatures`` removes visible signature
     stamps (the signer's name lives in the widget appearance, which the text loop
-    cannot see) and PII-bearing annotations. ``detect`` re-runs the detectors over
+    cannot see) and PII-bearing annotations. ``remove_images`` (opt-in) blanks
+    every embedded raster image — in a statement that is letterhead (logo, a
+    footer with address/phone/email, a signature stamp), i.e. PII no text detector
+    can read; it also removes any legitimate figure, so it is off by default.
+    ``detect`` re-runs the detectors over
     the page text to find PII surfaces; pass ``False`` to reuse the surfaces the
     given ``anonymizer`` already collected (e.g. during a preceding ``parse_pdf``),
     avoiding a second, costly model pass.
@@ -253,6 +280,8 @@ def write_anonymized_pdf(
             boxes += _redact_surface(page, words, surface, token, placed)
         if redact_signatures:
             boxes += _redact_widgets_and_annots(page, surface_keys, sig_index)
+        if remove_images:
+            boxes += _blank_images(page)
         # images=PIXELS (default) blanks the covered pixels of a page image too,
         # so a scanned name is erased from the image, not just the OCR text layer.
         page.apply_redactions()
