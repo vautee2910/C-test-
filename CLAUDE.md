@@ -231,9 +231,15 @@ Done and tested:
   blank the inside of "Jahresabschluss"/"Geschäftsjahr". **Image limit**: a firm
   letterhead (logo, footer address/phone/email) and a round signature stamp are
   embedded *raster images* — `get_text` returns nothing for them, so no text
-  detector (nor the `RawDocument`) sees that PII. Opt-in `remove_images=True`
-  blanks every embedded image (in a statement that is letterhead, not data); off
-  by default since it also drops legitimate figures.
+  detector (nor the `RawDocument`) sees that PII. Two opt-ins close it:
+  `remove_images=True` blanks every embedded image (blunt; also drops legitimate
+  figures), and `ocr_images=True` is the precise pass — PyMuPDF/Tesseract OCRs the
+  embedded images and only the PII *inside* them is redacted in place (the mark
+  itself is kept; words are matched only inside image rects so body text is never
+  re-touched). Validated on the e.V. letterhead: the footer name/address/phone/
+  email are redacted in situ. OCR's own limit remains — a stylised logo or
+  circular signature-stamp text it cannot read stays, so `remove_images` is the
+  guaranteed fallback for those marks. Both off by default.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf

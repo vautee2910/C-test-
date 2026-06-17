@@ -163,3 +163,50 @@ def test_remove_images_blanks_embedded_images(tmp_path: Path):
     removed = tmp_path / "removed.pdf"
     write_anonymized_pdf(src, removed, anonymizer=anon2, use_models=False, remove_images=True)
     assert len(fitz.open(removed)[0].get_images()) == 0  # opt-in removes them
+
+
+def _ocr_available() -> bool:
+    import fitz
+    doc = fitz.open()
+    doc.new_page()
+    try:
+        doc[0].get_textpage_ocr(full=False)
+        return True
+    except Exception:
+        return False
+
+
+def test_ocr_images_redacts_pii_inside_an_image(tmp_path: Path):
+    import pytest
+
+    if not _ocr_available():
+        pytest.skip("PyMuPDF/Tesseract OCR not available")
+
+    # Render a name to a high-res pixmap and embed it as an image (a "logo"),
+    # so the name exists only as image pixels — invisible to text detectors.
+    label = fitz.open()
+    lp = label.new_page(width=320, height=80)
+    lp.insert_text((10, 50), "Max Mustermann", fontsize=28)
+    pix = lp.get_pixmap(dpi=200)
+    label.close()
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Bericht", fontsize=11)
+    page.insert_image(fitz.Rect(72, 200, 372, 275), pixmap=pix)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+
+    cfg = {"people": ["Max Mustermann"], "replacement_policy": {"person": "[PERSON_{n}]"}}
+    out = tmp_path / "out.pdf"
+    write_anonymized_pdf(
+        src, out, anonymizer=build_anonymizer(cfg), use_models=False, ocr_images=True,
+        ocr_language="eng",
+    )
+    # Re-OCR the output: the name baked into the image must be gone.
+    red = fitz.open(out)
+    rp = red[0]
+    tp = rp.get_textpage_ocr(full=False, language="eng")
+    ocr_text = rp.get_text(textpage=tp)
+    assert "Mustermann" not in ocr_text

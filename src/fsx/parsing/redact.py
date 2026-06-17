@@ -27,6 +27,8 @@ that is a property of any detection-driven redaction, not of this code.
 
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -230,6 +232,83 @@ def _blank_images(page) -> int:
     return n
 
 
+def _resolve_tessdata(explicit: str | Path | None) -> str | None:
+    """Locate the Tesseract ``tessdata`` directory for PyMuPDF's OCR."""
+    if explicit:
+        return str(explicit)
+    env = os.environ.get("TESSDATA_PREFIX")
+    if env:
+        return env
+    try:
+        td = fitz.get_tessdata()
+        if td:
+            return str(td)
+    except Exception:  # pragma: no cover - binding dependent
+        pass
+    for path in glob.glob("/usr/share/tesseract-ocr/*/tessdata"):
+        return path
+    return None
+
+
+def _redact_image_text(
+    page, anonymizer: Anonymizer, placed: list["fitz.Rect"], *,
+    use_models: bool, tessdata: str | None, language: str, dpi: int,
+) -> int:
+    """OCR the page's embedded images and redact PII *inside* them, in place.
+
+    The precise alternative to ``remove_images``: instead of blanking whole
+    images, Tesseract (via PyMuPDF) reads the letterhead / stamp pixels, the
+    detectors find PII in that OCR text, and only the matching word boxes are
+    redacted — so a logo's address/phone/email/name is removed while the rest of
+    the image (the mark itself) is kept. Words are kept only when their box falls
+    inside an embedded-image rect, so this never re-touches body text (already
+    handled) and ignores OCR noise outside the images.
+    """
+    image_rects: list[fitz.Rect] = []
+    for img in page.get_images(full=True):
+        try:
+            image_rects += list(page.get_image_rects(img[0]))
+        except Exception:  # pragma: no cover - odd image
+            pass
+    if not image_rects:
+        return 0
+    try:
+        tp = page.get_textpage_ocr(
+            flags=0, language=language, dpi=dpi, full=False, tessdata=tessdata,
+        )
+        words = [(w[4], fitz.Rect(w[:4])) for w in page.get_text("words", textpage=tp)]
+    except Exception:  # pragma: no cover - OCR unavailable
+        return 0
+
+    def in_image(r: "fitz.Rect") -> bool:
+        centre = fitz.Point((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2)
+        return any(ir.contains(centre) for ir in image_rects)
+
+    img_words = [(t, r) for t, r in words if t.strip() and in_image(r)]
+    if not img_words:
+        return 0
+    # Detect PII in the OCR'd image text (adds letterhead address/phone/name to
+    # the shared token map), then redact every whole-word match among the image
+    # words. Longest surfaces first; reuse the document's token map.
+    anonymizer.anonymize(" ".join(t for t, _ in img_words), use_models=use_models)
+    ordered = sorted(
+        ((s.strip(), tok) for tok, s in anonymizer.mapping.items() if len(s.strip()) >= _MIN_SURFACE),
+        key=lambda kv: len(kv[0]), reverse=True,
+    )
+    n = 0
+    for surface, token in ordered:
+        for r in _match_word_rects(img_words, surface):
+            if _mostly_covered(r, placed):
+                continue
+            page.add_redact_annot(
+                r, text=token, fontsize=_fit_fontsize(r, token),
+                align=fitz.TEXT_ALIGN_LEFT, fill=(1, 1, 1), text_color=(0, 0, 0),
+            )
+            placed.append(r)
+            n += 1
+    return n
+
+
 def write_anonymized_pdf(
     src: str | Path,
     dst: str | Path,
@@ -239,6 +318,10 @@ def write_anonymized_pdf(
     scrub_metadata: bool = True,
     redact_signatures: bool = True,
     remove_images: bool = False,
+    ocr_images: bool = False,
+    ocr_language: str = "deu",
+    ocr_dpi: int = 200,
+    tessdata: str | Path | None = None,
     detect: bool = True,
 ) -> RedactionSummary:
     """Write an anonymised copy of ``src`` to ``dst`` and return a summary.
@@ -254,6 +337,9 @@ def write_anonymized_pdf(
     every embedded raster image — in a statement that is letterhead (logo, a
     footer with address/phone/email, a signature stamp), i.e. PII no text detector
     can read; it also removes any legitimate figure, so it is off by default.
+    ``ocr_images`` (opt-in) is the precise alternative: Tesseract reads the
+    embedded images and only the PII *inside* them is redacted, keeping the mark
+    itself (``ocr_language``/``ocr_dpi``/``tessdata`` tune the OCR).
     ``detect`` re-runs the detectors over
     the page text to find PII surfaces; pass ``False`` to reuse the surfaces the
     given ``anonymizer`` already collected (e.g. during a preceding ``parse_pdf``),
@@ -272,6 +358,7 @@ def write_anonymized_pdf(
     )
     surface_keys = [s for s, _ in ordered]
     sig_index = [0]
+    td = _resolve_tessdata(tessdata) if ocr_images else None
     boxes = 0
     for page in doc:
         words = [(w[4], fitz.Rect(w[:4])) for w in page.get_text("words")]
@@ -280,6 +367,11 @@ def write_anonymized_pdf(
             boxes += _redact_surface(page, words, surface, token, placed)
         if redact_signatures:
             boxes += _redact_widgets_and_annots(page, surface_keys, sig_index)
+        if ocr_images:
+            boxes += _redact_image_text(
+                page, anonymizer, placed,
+                use_models=use_models, tessdata=td, language=ocr_language, dpi=ocr_dpi,
+            )
         if remove_images:
             boxes += _blank_images(page)
         # images=PIXELS (default) blanks the covered pixels of a page image too,
