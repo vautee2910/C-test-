@@ -165,6 +165,26 @@ def test_remove_images_blanks_embedded_images(tmp_path: Path):
     assert len(fitz.open(removed)[0].get_images()) == 0  # opt-in removes them
 
 
+def test_remove_images_keeps_full_page_content_image(tmp_path: Path):
+    # A full-page image is content (e.g. an appended terms page), not letterhead —
+    # remove_images must NOT blank it (that would destroy the page).
+    doc = fitz.open()
+    page = doc.new_page()
+    rect = page.rect
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, int(rect.width), int(rect.height)))
+    pix.clear_with(240)
+    page.insert_image(rect, pixmap=pix)  # covers the whole page
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+
+    out = tmp_path / "out.pdf"
+    write_anonymized_pdf(
+        src, out, anonymizer=build_anonymizer(_CONFIG), use_models=False, remove_images=True
+    )
+    assert len(fitz.open(out)[0].get_images()) >= 1  # full-page image kept
+
+
 def _ocr_available() -> bool:
     import fitz
     doc = fitz.open()

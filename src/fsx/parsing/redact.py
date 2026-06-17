@@ -212,16 +212,19 @@ def _redact_widgets_and_annots(page, surfaces: list[str], sig_index: list[int]) 
     return n
 
 
-def _blank_images(page) -> int:
-    """Cover every embedded raster image on ``page`` with a white redaction box.
+def _blank_images(page, max_area_ratio: float) -> int:
+    """Cover small embedded raster images on ``page`` with a white redaction box.
 
-    In a financial statement an embedded image is almost always letterhead — a
-    firm logo, a footer with address/phone/email, or a signature stamp — i.e. PII
-    that *no* text detector can see (``get_text`` returns nothing for image
-    pixels). This is opt-in: it also removes any legitimate figure, so the caller
-    decides. ``apply_redactions`` (images=PIXELS) erases the covered pixels.
+    In a statement a *small* embedded image is almost always letterhead — a firm
+    logo, a footer with address/phone/email, or a signature stamp — i.e. PII that
+    *no* text detector can see (``get_text`` returns nothing for image pixels). A
+    *full-page* image, by contrast, is usually content (e.g. an appended terms-of-
+    engagement page rendered as one image), so images covering at least
+    ``max_area_ratio`` of the page are left intact — blanking them would destroy
+    the page. ``apply_redactions`` (images=PIXELS) erases the covered pixels.
     """
     n = 0
+    page_area = abs(page.rect.get_area()) or 1.0
     seen: set = set()
     for img in page.get_images(full=True):
         xref = img[0]
@@ -229,6 +232,8 @@ def _blank_images(page) -> int:
             continue
         seen.add(xref)
         for r in page.get_image_rects(xref):
+            if abs(r.get_area()) >= max_area_ratio * page_area:
+                continue  # full-page image = content, keep it
             page.add_redact_annot(r, fill=(1, 1, 1))
             n += 1
     return n
@@ -320,6 +325,7 @@ def write_anonymized_pdf(
     scrub_metadata: bool = True,
     redact_signatures: bool = True,
     remove_images: bool = False,
+    remove_images_max_area: float = 0.5,
     ocr_images: bool = False,
     ocr_language: str = "deu",
     ocr_dpi: int = 200,
@@ -336,9 +342,11 @@ def write_anonymized_pdf(
     author / internal title. ``redact_signatures`` removes visible signature
     stamps (the signer's name lives in the widget appearance, which the text loop
     cannot see) and PII-bearing annotations. ``remove_images`` (opt-in) blanks
-    every embedded raster image — in a statement that is letterhead (logo, a
-    footer with address/phone/email, a signature stamp), i.e. PII no text detector
-    can read; it also removes any legitimate figure, so it is off by default.
+    embedded raster images that are letterhead (logo, a footer with address/phone/
+    email, a signature stamp), i.e. PII no text detector can read; off by default.
+    Only images smaller than ``remove_images_max_area`` of the page are blanked —
+    a full-page image is content (e.g. an appended terms-of-engagement page) and
+    is kept, so the page is not destroyed.
     ``ocr_images`` (opt-in) is the precise alternative: Tesseract reads the
     embedded images and only the PII *inside* them is redacted, keeping the mark
     itself (``ocr_language``/``ocr_dpi``/``tessdata`` tune the OCR).
@@ -377,7 +385,7 @@ def write_anonymized_pdf(
                 use_models=use_models, tessdata=td, language=ocr_language, dpi=ocr_dpi,
             )
         if remove_images:
-            boxes += _blank_images(page)
+            boxes += _blank_images(page, remove_images_max_area)
         # images=PIXELS (default) blanks the covered pixels of a page image too,
         # so a scanned name is erased from the image, not just the OCR text layer.
         page.apply_redactions()
