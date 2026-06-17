@@ -76,7 +76,9 @@ def _surfaces_by_token(doc: "fitz.Document", anonymizer: Anonymizer, use_models:
             text = block[4]
             if text and text.strip():
                 anonymizer.anonymize(text, use_models=use_models)
-    return {surface: token for token, surface in anonymizer.mapping.items()}
+    # All surface *forms* (every spelling of each entity), not the token->one
+    # surface map — so a company's long and short names are both redacted.
+    return dict(anonymizer.surface_tokens)
 
 
 def _mostly_covered(rect: "fitz.Rect", placed: list["fitz.Rect"]) -> bool:
@@ -292,7 +294,7 @@ def _redact_image_text(
     # words. Longest surfaces first; reuse the document's token map.
     anonymizer.anonymize(" ".join(t for t, _ in img_words), use_models=use_models)
     ordered = sorted(
-        ((s.strip(), tok) for tok, s in anonymizer.mapping.items() if len(s.strip()) >= _MIN_SURFACE),
+        ((s.strip(), tok) for s, tok in anonymizer.surface_tokens.items() if len(s.strip()) >= _MIN_SURFACE),
         key=lambda kv: len(kv[0]), reverse=True,
     )
     n = 0
@@ -350,7 +352,9 @@ def write_anonymized_pdf(
     if detect:
         surfaces = _surfaces_by_token(doc, anonymizer, use_models)
     else:
-        surfaces = {surface: token for token, surface in anonymizer.mapping.items()}
+        # Reuse every surface form the anonymiser already saw (e.g. during the
+        # preceding parse_pdf pass) — all spellings, not the token->one map.
+        surfaces = dict(anonymizer.surface_tokens)
     # Longest surfaces first: redact "Muster Maschinenbau GmbH" before "Muster".
     ordered = sorted(
         ((s.strip(), t) for s, t in surfaces.items() if len(s.strip()) >= _MIN_SURFACE),

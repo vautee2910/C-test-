@@ -53,6 +53,11 @@ class Anonymizer:
         self._entity_tokens: dict[str, str] = {}
         self._label_counters: dict[Label, int] = {}
         self._mapping: dict[str, str] = {}
+        # Every *surface form* ever replaced -> its token. Unlike ``_mapping``
+        # (token -> one surface), this keeps all spellings of an entity (e.g. a
+        # company's long and short name), which a downstream redactor needs to
+        # find every mention, not just the first.
+        self._surface_tokens: dict[str, str] = {}
 
     def _token_for(self, span: PiiSpan) -> str:
         """Return the stable token for a span's entity, assigning one if new."""
@@ -93,7 +98,9 @@ class Anonymizer:
         cursor = 0
         for span in spans:
             out.append(text[cursor : span.start])
-            out.append(self._token_for(span))
+            token = self._token_for(span)
+            self._surface_tokens[span.text] = token
+            out.append(token)
             cursor = span.end
         out.append(text[cursor:])
 
@@ -107,3 +114,8 @@ class Anonymizer:
     def mapping(self) -> dict[str, str]:
         """Full token → original mapping accumulated so far (audit only)."""
         return dict(self._mapping)
+
+    @property
+    def surface_tokens(self) -> dict[str, str]:
+        """Every replaced surface form → its token (all spellings of each entity)."""
+        return dict(self._surface_tokens)

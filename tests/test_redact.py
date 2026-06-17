@@ -236,3 +236,24 @@ def test_parse_pdf_forwards_redacted_options(tmp_path: Path):
     text = "\n".join(p.get_text("text") for p in red)
     assert "[UNTERNEHMEN_1]" in text          # text redaction still happened
     assert len(red[0].get_images()) == 0       # option was forwarded
+
+
+def test_all_alias_forms_redacted_not_just_first(tmp_path: Path):
+    # A company with a long and short name (same entity/token): both spellings
+    # must be redacted, even though the token->surface map keeps only one.
+    cfg = {
+        "company_aliases": ["Muster Maschinenbau GmbH", "Muster Maschinenbau"],
+        "replacement_policy": {"company": "[UNTERNEHMEN_{n}]"},
+    }
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Die Muster Maschinenbau GmbH meldet.", fontsize=11)
+    page.insert_text((72, 130), "Auch die Muster Maschinenbau waechst.", fontsize=11)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+    dst = tmp_path / "out.pdf"
+    write_anonymized_pdf(src, dst, anonymizer=build_anonymizer(cfg), use_models=False)
+    text = fitz.open(dst)[0].get_text("text")
+    assert "Muster Maschinenbau" not in text          # both long and short gone
+    assert text.count("[UNTERNEHMEN_1]") == 2
