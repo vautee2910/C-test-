@@ -225,7 +225,15 @@ Done and tested:
   detector recall** — the privacy filter is person/contact only, so company/ORG
   and bare city names need the dictionary (the engagement knows the client) or
   spaCy NER; the integrated path reuses the run's already-detected surfaces
-  (`detect=False`), so there is no second model pass.
+  (`detect=False`), so there is no second model pass. Surface matching is
+  whole-word (consecutive `get_text("words")` runs), not substring — a short or
+  mis-detected surface ("Jah" from a hyphenated "Jah-resabschluss") can no longer
+  blank the inside of "Jahresabschluss"/"Geschäftsjahr". **Image limit**: a firm
+  letterhead (logo, footer address/phone/email) and a round signature stamp are
+  embedded *raster images* — `get_text` returns nothing for them, so no text
+  detector (nor the `RawDocument`) sees that PII. Opt-in `remove_images=True`
+  blanks every embedded image (in a statement that is letterhead, not data); off
+  by default since it also drops legitimate figures.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
