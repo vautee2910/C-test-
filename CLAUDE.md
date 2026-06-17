@@ -232,8 +232,10 @@ Done and tested:
   letterhead (logo, footer address/phone/email) and a round signature stamp are
   embedded *raster images* — `get_text` returns nothing for them, so no text
   detector (nor the `RawDocument`) sees that PII. Two opt-ins close it:
-  `remove_images=True` blanks every embedded image (blunt; also drops legitimate
-  figures), and `ocr_images=True` is the precise pass — PyMuPDF/Tesseract OCRs the
+  `remove_images=True` blanks *small* embedded images (logo / footer / stamp) but
+  keeps a full-page image (content, e.g. an appended terms page rendered as one
+  image — blanking it would empty the page; gated by `remove_images_max_area`),
+  and `ocr_images=True` is the precise pass — PyMuPDF/Tesseract OCRs the
   embedded images and only the PII *inside* them is redacted in place (the mark
   itself is kept; words are matched only inside image rects so body text is never
   re-touched). Validated on the e.V. letterhead: the footer name/address/phone/
