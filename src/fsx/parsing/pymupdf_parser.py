@@ -247,6 +247,7 @@ def parse_pdf(
     fiscal_year: int,
     source_filename: str | None = None,
     model_on_tables: bool = True,
+    redacted_pdf_path: str | Path | None = None,
 ) -> RawDocument:
     """Parse a PDF into an anonymised Level-1 :class:`RawDocument`.
 
@@ -258,14 +259,27 @@ def parse_pdf(
     ``model_on_tables`` defaults to ``True`` — the precise path, where the
     statistical model scans table cells too. Pass ``False`` to opt into the
     faster blocks-only path (see :class:`PyMuPDFParser`).
+
+    ``redacted_pdf_path``, when set, also writes an anonymised *copy of the PDF*
+    there (same layout, PII replaced in place by the same tokens, metadata
+    scrubbed). It reuses this run's anonymiser and the surfaces it already
+    detected, so no second model pass is needed.
     """
-    return PyMuPDFParser(anonymizer, model_on_tables=model_on_tables).parse(
+    parser = PyMuPDFParser(anonymizer, model_on_tables=model_on_tables)
+    raw = parser.parse(
         path,
         document_id=document_id,
         company_id=company_id,
         fiscal_year=fiscal_year,
         source_filename=source_filename,
     )
+    if redacted_pdf_path is not None:
+        from .redact import write_anonymized_pdf
+
+        write_anonymized_pdf(
+            path, redacted_pdf_path, anonymizer=anonymizer, detect=False,
+        )
+    return raw
 
 
 def parse_pdf_with_ocr(
@@ -280,6 +294,7 @@ def parse_pdf_with_ocr(
     force_ocr: bool = False,
     ocr_output_path: str | Path | None = None,
     model_on_tables: bool = True,
+    redacted_pdf_path: str | Path | None = None,
 ) -> RawDocument:
     """Parse a PDF, transparently OCR-ing it first **if** it is a scan.
 
@@ -292,6 +307,9 @@ def parse_pdf_with_ocr(
     ``source_filename`` defaults to the **original** file's name (not the
     intermediate ``.ocr.pdf``), so provenance points at the real input.
     ``model_on_tables`` is forwarded to :func:`parse_pdf` (precise by default).
+    ``redacted_pdf_path``, when set, writes an anonymised copy of the *searchable*
+    (OCR'd, if it was a scan) PDF there — so a scanned name is redacted from the
+    page image too, not just the text layer.
     """
     # Lazy import keeps the OCRmyPDF dependency optional for callers that never
     # touch scanned documents.
@@ -312,6 +330,7 @@ def parse_pdf_with_ocr(
         fiscal_year=fiscal_year,
         source_filename=source_filename if source_filename is not None else path.name,
         model_on_tables=model_on_tables,
+        redacted_pdf_path=redacted_pdf_path,
     )
 
 

@@ -20,6 +20,7 @@ from .pymupdf_parser import (
     parse_pdf_with_config,
     parse_pdf_with_ocr,
 )
+from .redact import RedactionSummary, write_anonymized_pdf
 from .text_layer import has_text_layer, needs_ocr, text_layer_stats
 
 __all__ = [
@@ -27,6 +28,9 @@ __all__ = [
     "parse_pdf",
     "parse_pdf_with_config",
     "parse_pdf_with_ocr",
+    # anonymised-PDF output
+    "write_anonymized_pdf",
+    "RedactionSummary",
     # OCR front-stage
     "OcrBackend",
     "OcrError",
