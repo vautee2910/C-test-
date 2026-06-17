@@ -209,6 +209,23 @@ Done and tested:
   table-heavy pages (140→49.5 s; the shared token mapping keeps pseudonyms
   consistent either way). Trade-off of the fast path: a name only ever in a table
   cell is then caught by the dictionary/regex layers, not the model.
+- **Anonymised PDF output** (`parsing/redact.py`, `write_anonymized_pdf`; opt-in
+  `parse_pdf(..., redacted_pdf_path=...)`): emits the *same* PDF — layout, fonts,
+  figures, every non-PII glyph untouched — with each detected PII surface replaced
+  in place by the pipeline's pseudonym token. Built on PyMuPDF redaction
+  annotations, so the text is genuinely removed from the content stream (and with
+  `images=PIXELS` the covered pixels of a page image, so a *scanned* name is
+  erased from the image, not just the OCR layer). It also scrubs the info-dict +
+  XMP metadata and embedded files (real docs carry an author / internal title)
+  and removes signature stamps (the signer's name lives in the widget appearance,
+  invisible to `search_for`). Surface matching is longest-first with overlap-skip;
+  a surface that does not match as one contiguous run falls back to per-word boxes
+  (over-redact rather than leak). Validated on the e.V. (born-digital, *signed*)
+  and the scan: layout 1:1, metadata cleared, tokens in place. **Recall equals
+  detector recall** — the privacy filter is person/contact only, so company/ORG
+  and bare city names need the dictionary (the engagement knows the client) or
+  spaCy NER; the integrated path reuses the run's already-detected surfaces
+  (`detect=False`), so there is no second model pass.
 
 Known/deferred (be honest about these):
 - **OCR digit errors** on scans are mitigated (reconciliation flags, low-conf
