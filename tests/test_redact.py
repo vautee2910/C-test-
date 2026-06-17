@@ -107,3 +107,35 @@ def test_parse_pdf_emits_redacted_copy(tmp_path: Path):
     # same token as the Level-1 RawDocument
     raw_text = " ".join(b.text_anonymized for pg in raw.pages for b in pg.blocks)
     assert "[UNTERNEHMEN_1]" in raw_text
+
+
+def test_short_surface_does_not_redact_inside_longer_word(tmp_path: Path):
+    # A short/mis-detected surface ("Jah") must not blank the inside of
+    # "Jahresabschluss" — redaction matches whole words, not substrings.
+    cfg = {"company_aliases": ["Jah"], "replacement_policy": {"company": "[X_{n}]"}}
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Jah und der Jahresabschluss 2024", fontsize=11)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+    dst = tmp_path / "out.pdf"
+    write_anonymized_pdf(src, dst, anonymizer=build_anonymizer(cfg), use_models=False)
+    text = fitz.open(dst)[0].get_text("text")
+    assert "Jahresabschluss" in text   # the long word is untouched
+    assert "[X_1]" in text             # the standalone short word is redacted
+
+
+def test_multiword_surface_redacted_as_one_run(tmp_path: Path):
+    cfg = {"people": ["Max Mustermann"], "replacement_policy": {"person": "[PERSON_{n}]"}}
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 100), "Sachbearbeiter Max Mustermann hat geprueft", fontsize=11)
+    src = tmp_path / "in.pdf"
+    doc.save(src)
+    doc.close()
+    dst = tmp_path / "out.pdf"
+    write_anonymized_pdf(src, dst, anonymizer=build_anonymizer(cfg), use_models=False)
+    text = fitz.open(dst)[0].get_text("text")
+    assert "Mustermann" not in text and "Max " not in text
+    assert "[PERSON_1]" in text

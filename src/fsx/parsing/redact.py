@@ -94,39 +94,53 @@ def _mostly_covered(rect: "fitz.Rect", placed: list["fitz.Rect"]) -> bool:
     return False
 
 
-def _redact_surface(page, surface: str, token: str, placed: list["fitz.Rect"]) -> int:
-    """Add redaction boxes for one PII surface on ``page``; return box count.
+_EDGE_PUNCT = " \t\r\n.,;:!?()[]{}\"'`/\\„“”»«…-"
 
-    Tries the whole surface as one run first (one token box). If it is not found
-    as a contiguous run (e.g. it wrapped across lines), falls back to per-word
-    boxes so the PII is still removed — over-redacting rather than leaking.
+
+def _norm(text: str) -> str:
+    """Whitespace-collapsed, edge-punctuation-stripped, case-folded comparison key."""
+    return " ".join(text.split()).strip(_EDGE_PUNCT).casefold()
+
+
+def _match_word_rects(words: list[tuple[str, "fitz.Rect"]], surface: str) -> list["fitz.Rect"]:
+    """Rects of every *whole-word* run of ``words`` whose text equals ``surface``.
+
+    Matching is by consecutive word windows, not substring: this is what keeps a
+    short or mis-detected surface ("Jah" from a hyphenated "Jah-resabschluss")
+    from blanking the inside of every "Jahresabschluss"/"Geschäftsjahr" — only a
+    standalone word matches. It also rejoins a surface that wrapped across lines
+    (the words list is line-agnostic), so multi-word names/addresses still match.
     """
+    target = _norm(surface)
+    if not target:
+        return []
+    n_words = len(target.split())
+    rects: list[fitz.Rect] = []
+    for i in range(len(words) - n_words + 1):
+        window = words[i:i + n_words]
+        if _norm(" ".join(t for t, _ in window)) == target:
+            r = fitz.Rect(window[0][1])
+            for _, rr in window[1:]:
+                r |= rr
+            rects.append(r)
+    return rects
+
+
+def _redact_surface(
+    page, words: list[tuple[str, "fitz.Rect"]], surface: str, token: str,
+    placed: list["fitz.Rect"],
+) -> int:
+    """Add a token redaction box over every whole-word match of ``surface``."""
     n = 0
-    rects = page.search_for(surface)
-    if rects:
-        for r in rects:
-            if _mostly_covered(r, placed):
-                continue
-            page.add_redact_annot(
-                r, text=token, fontsize=_fit_fontsize(r, token),
-                align=fitz.TEXT_ALIGN_LEFT, fill=(1, 1, 1), text_color=(0, 0, 0),
-            )
-            placed.append(r)
-            n += 1
-        return n
-    # Fallback: a multi-word surface that did not match as one run.
-    for word in surface.split():
-        if len(word) < 3 or not any(c.isalnum() for c in word):
+    for r in _match_word_rects(words, surface):
+        if _mostly_covered(r, placed):
             continue
-        for r in page.search_for(word):
-            if _mostly_covered(r, placed):
-                continue
-            page.add_redact_annot(
-                r, text=token, fontsize=_fit_fontsize(r, token),
-                align=fitz.TEXT_ALIGN_LEFT, fill=(1, 1, 1), text_color=(0, 0, 0),
-            )
-            placed.append(r)
-            n += 1
+        page.add_redact_annot(
+            r, text=token, fontsize=_fit_fontsize(r, token),
+            align=fitz.TEXT_ALIGN_LEFT, fill=(1, 1, 1), text_color=(0, 0, 0),
+        )
+        placed.append(r)
+        n += 1
     return n
 
 
@@ -233,9 +247,10 @@ def write_anonymized_pdf(
     sig_index = [0]
     boxes = 0
     for page in doc:
+        words = [(w[4], fitz.Rect(w[:4])) for w in page.get_text("words")]
         placed: list[fitz.Rect] = []
         for surface, token in ordered:
-            boxes += _redact_surface(page, surface, token, placed)
+            boxes += _redact_surface(page, words, surface, token, placed)
         if redact_signatures:
             boxes += _redact_widgets_and_annots(page, surface_keys, sig_index)
         # images=PIXELS (default) blanks the covered pixels of a page image too,
