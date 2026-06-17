@@ -43,3 +43,23 @@ def test_domain_matched():
     spans = det.detect("Web: muster-gmbh.de online")
     assert len(spans) == 1
     assert spans[0].label == Label.DOMAIN
+
+
+def test_alias_matches_across_a_line_break():
+    # A company name wrapped across lines (justified prose) still matches — the
+    # alias words are joined with \s+, so the newline between them is fine.
+    det = DictionaryDetector(
+        [DictionaryEntity("c0", Label.COMPANY, ["Muster Maschinenbau GmbH"])]
+    )
+    spans = det.detect("… der Muster Maschinenbau\nGmbH für das Jahr …")
+    assert len(spans) == 1
+    assert spans[0].entity_id == "c0"
+    assert "Muster Maschinenbau" in spans[0].text
+
+
+def test_alias_with_internal_spaced_punctuation_wraps():
+    det = DictionaryDetector(
+        [DictionaryEntity("c0", Label.COMPANY, ["Innovativer Handwerker e. V."])]
+    )
+    spans = det.detect("Auftraggeber Innovativer Handwerker e.\nV. beauftragte mich")
+    assert len(spans) == 1

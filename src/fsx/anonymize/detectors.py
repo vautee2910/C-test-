@@ -69,8 +69,13 @@ class DictionaryDetector:
             for alias in entity.aliases:
                 # \b is unreliable next to non-word chars (e.g. domains), so use
                 # lookarounds that treat any word char as a boundary breaker.
+                # Join the alias words with \s+ so a multi-word name that wraps
+                # across lines (or is double-spaced) still matches — e.g. a company
+                # name broken between two lines in justified prose.
+                parts = [re.escape(p) for p in alias.split()]
+                body = r"\s+".join(parts) if len(parts) > 1 else (parts[0] if parts else re.escape(alias))
                 pattern = re.compile(
-                    rf"(?<!\w){re.escape(alias)}(?!\w)",
+                    rf"(?<!\w){body}(?!\w)",
                     re.IGNORECASE,
                 )
                 self._compiled.append((entity, alias, pattern))
