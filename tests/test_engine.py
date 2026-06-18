@@ -113,3 +113,12 @@ def test_use_models_false_skips_model_detectors_but_keeps_core():
     ]).anonymize(text, use_models=False)
     assert "Mustermann" in core.text          # not redacted by the skipped model
     assert "[UNTERNEHMEN_1]" in core.text      # dictionary layer still ran
+
+
+def test_scheme_less_www_url_is_tokenised_end_to_end():
+    # The whole anonymiser (dictionary + regex) must replace a scheme-less
+    # website with a URL token and leave no raw host behind.
+    eng = _engine()
+    res = eng.anonymize("Internet: www.stb-burmester.de — Kontakt")
+    assert "[URL_1]" in res.text
+    assert "stb-burmester.de" not in res.text

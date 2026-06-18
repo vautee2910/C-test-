@@ -138,6 +138,12 @@ REGEX_RULES: list[tuple[Label, re.Pattern[str]]] = [
     (Label.EMAIL, re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b")),
     # Full URL.
     (Label.URL, re.compile(r"\bhttps?://[^\s<>()\"]+", re.IGNORECASE)),
+    # Scheme-less website anchored on a literal "www." — a firm letterhead /
+    # footer routinely prints "www.kanzlei.de" with no scheme, which the full-URL
+    # rule misses. Requiring the "www." prefix keeps the false-positive rate of a
+    # bare-domain rule away (in German financial prose "www." is effectively only
+    # ever a URL), while still catching the contact PII.
+    (Label.URL, re.compile(r"\bwww\.(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}\b", re.IGNORECASE)),
     # German phone numbers — see PHONE_RE above (international "+49"/"0049" trunk
     # with flexible grouping, or a strict domestic "0…" that will not eat the
     # dense number columns of a statement).

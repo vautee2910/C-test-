@@ -172,7 +172,11 @@ Done and tested:
   as a phone — it kept corrupting figures in number-dense statistics tables. On
   the Jahrbuch front matter the anonymiser (regex-only) catches 6/8 PII (3
   phone/fax, 2 addresses, 1 email); the 2 personal names need the opt-in spaCy
-  NER / known-entities dictionary (regex cannot find names by design).
+  NER / known-entities dictionary (regex cannot find names by design). The URL
+  rules cover an explicit `http(s)://` *and* a scheme-less site anchored on a
+  literal `www.` (`www.kanzlei.de`, common on a firm letterhead/footer); the
+  `www.` anchor keeps the false positives of a bare-domain rule away — bare
+  domains stay dictionary-only.
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
 - Anonymisation: dictionary + regex core, plus two optional, injectable model

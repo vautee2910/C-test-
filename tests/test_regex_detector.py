@@ -133,3 +133,25 @@ def test_same_iban_shares_entity_id():
     assert len(ibans) == 2
     # Differently formatted but identical IBAN -> same entity id (same token).
     assert ibans[0].entity_id == ibans[1].entity_id
+
+
+def test_www_url_without_scheme_detected():
+    # A scheme-less website (firm letterhead/footer) must be caught — observed
+    # leaking as "www.stb-burmester.de" in a real Kanzlei footer.
+    found = _labels("Internet: www.stb-burmester.de erreichbar")
+    assert any(lbl == Label.URL for lbl, _ in found)
+    # the matched surface is the whole host, not a fragment
+    assert any(t == "www.stb-burmester.de" for lbl, t in found if lbl == Label.URL)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Der stpfl.EU Hinweis und and.EU Text",  # prose abbreviations
+        "siehe z.B. und i.d.R. die Regel",        # common abbreviations
+        "Die Domain firma-mueller.de ist frei",   # bare domain (dictionary-only)
+        "Nur das Wort www allein hier",            # 'www' without a domain
+    ],
+)
+def test_www_rule_does_not_false_positive(text):
+    assert not any(lbl == Label.URL for lbl, _ in _labels(text))
