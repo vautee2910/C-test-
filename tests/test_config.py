@@ -184,3 +184,10 @@ def test_example_yaml_loads_and_anonymises():
     assert "Max Mustermann" not in res.text
     assert "München" not in res.text
     assert "[UNTERNEHMEN_1]" in res.text
+
+
+def test_addresses_category_maps_to_address_label():
+    cfg = {"addresses": ["Hohe Luft 1a"], "replacement_policy": {"address": "[ADRESSE_{n}]"}}
+    eng = build_anonymizer(cfg)
+    res = eng.anonymize("Sitz: Hohe Luft 1a, im Norden")
+    assert res.text == "Sitz: [ADRESSE_1], im Norden"

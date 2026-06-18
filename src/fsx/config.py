@@ -60,6 +60,7 @@ _DICT_CATEGORIES: dict[str, tuple[Label, bool]] = {
     "subsidiaries": (Label.COMPANY, False),
     "people": (Label.PERSON, False),
     "locations": (Label.LOCATION, False),
+    "addresses": (Label.ADDRESS, False),
     "auditors": (Label.AUDITOR, False),
     "tax_advisors": (Label.TAX_ADVISOR, False),
     "domains": (Label.DOMAIN, False),
