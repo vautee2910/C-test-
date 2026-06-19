@@ -196,7 +196,19 @@ Done and tested:
   entity set (no network, no mis-tag), while the German-tuned `RegexDetector`
   keeps owning HRB/USt-IdNr./Steuernummer/PLZ/phone and our `Anonymizer` keeps
   the consistent numbered pseudonyms Presidio's anonymizer lacks. It reuses the
-  same precision guards (stopwords, `_lacks_uppercase`, structural noise, score). The anonymiser targets *all* document types, not only
+  same precision guards (stopwords, `_lacks_uppercase`, structural noise, score).
+  End-to-end NER bakeoff on the e.V. (unknown client, no dictionary, prose
+  blocks): Presidio ≈ `SpacyNerDetector` — **identical** 12/15 text-layer PII
+  recall, same over-redaction ("Jahresüberschuss"), ~equal token counts (~138),
+  same ~7 s, because **Presidio's German NlpEngine *is* spaCy `de_core_news_lg`**.
+  So Presidio adds no NER advantage for the German pipeline over the leaner direct
+  spaCy detector (its value is only framework breadth — multilingual / transformer
+  engines / operators — that we don't need or already have). Both over-generate
+  massively (~138 tokens for ~10 real entities — the precision cost of NER vs a
+  curated dictionary); a replacement-operator bakeoff (`test_operator_bakeoff.py`)
+  shows our engine's numbered, entity-grouped pseudonyms beat Presidio's built-in
+  operators (`replace` collapses entities, `mask` leaks a surname, `hash` is
+  surface-based/unreadable). The anonymiser targets *all* document types, not only
   statements. Validated on the Jahrbuch front matter: with the privacy-filter
   on, the pipeline reaches 8/8 PII (adds the 2 personal names the regex cannot
   find). The model is context-sensitive — it misses names when fed a whole page
