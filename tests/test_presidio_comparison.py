@@ -46,6 +46,19 @@ def presidio():
     return _presidio_or_skip()
 
 
+def _privacy_or_skip():
+    from fsx.anonymize import PrivacyFilterDetector
+    try:
+        return PrivacyFilterDetector.load()
+    except Exception as exc:  # pragma: no cover
+        pytest.skip(f"privacy-filter unavailable: {exc}")
+
+
+@pytest.fixture(scope="module")
+def privacy():
+    return _privacy_or_skip()
+
+
 def _labels(spans):
     return {s.label for s in spans}
 
@@ -83,3 +96,33 @@ def test_presidio_does_not_over_redact_statement_vocabulary(presidio):
     surfaces = {s.text for s in presidio.detect(text)}
     for term in ("Bilanz", "Aktiva", "Passiva", "Umsatzerlöse", "Anlagevermögen"):
         assert term not in surfaces
+
+
+# --- privacy-filter vs Presidio: similar on person/contact, differ on ORG -- #
+
+def test_presidio_has_org_class_privacy_filter_does_not(presidio, privacy):
+    # The key categorical difference: Presidio (general NER) tags ORGANIZATION;
+    # the openai/privacy-filter is person/contact-only and has no company class.
+    text = "Der Bundesverband innovativer Handwerker e.V. mit Sitz in Berlin."
+    assert Label.COMPANY in _labels(presidio.detect(text))
+    assert Label.COMPANY not in _labels(privacy.detect(text))
+
+
+def test_both_catch_the_person_name(presidio, privacy):
+    # Their genuine overlap: a person name is caught by both.
+    text = "Ansprechpartner ist Mike Burmester, E-Mail info@stb-burmester.de."
+    assert Label.PERSON in _labels(presidio.detect(text))
+    assert Label.PERSON in _labels(privacy.detect(text))
+
+
+def test_presidio_bundles_regex_email_privacy_filter_does_not(presidio, privacy):
+    # Presidio = NER + regex recognizers, so it catches the contact email; the
+    # privacy-filter is a pure person/contact *model* and misses it here. In our
+    # pipeline the email is owned by RegexDetector regardless (asserted last), so
+    # privacy-filter not catching it is fine.
+    from fsx.anonymize.detectors import RegexDetector
+
+    text = "Ansprechpartner ist Mike Burmester, E-Mail info@stb-burmester.de."
+    assert Label.EMAIL in _labels(presidio.detect(text))      # Presidio's regex
+    assert Label.EMAIL not in _labels(privacy.detect(text))   # model alone misses it
+    assert Label.EMAIL in _labels(RegexDetector().detect(text))  # our regex covers it
