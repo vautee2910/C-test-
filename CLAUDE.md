@@ -179,12 +179,24 @@ Done and tested:
   domains stay dictionary-only.
 - Modularity: `extract` + `anonymize` standalone & guarded; Anlagenspiegel moved
   to `hgb/`.
-- Anonymisation: dictionary + regex core, plus two optional, injectable model
+- Anonymisation: dictionary + regex core, plus optional, injectable model
   detectors in `anonymize/model_detectors.py` — `SpacyNerDetector` (ORG/person/
   location; with structural + injected stopword filtering so it stops redacting
-  statement vocabulary) and `PrivacyFilterDetector` (openai/privacy-filter ONNX,
-  person/contact PII, no ORG). Both off by default, enabled via the `models`
-  config section. The anonymiser targets *all* document types, not only
+  statement vocabulary), `PrivacyFilterDetector` (openai/privacy-filter ONNX,
+  person/contact PII, no ORG), and `PresidioDetector` (Microsoft Presidio
+  analyzer as a Detector source). All off by default, enabled via the `models`
+  config section (`models.presidio.enabled`). **Presidio is a measured
+  alternative, not a replacement**: benchmarked on German financial text
+  (`tests/test_presidio_comparison.py`, opt-in `FSX_PRESIDIO_E2E=1`) it matches
+  our NER strength (PERSON/ORGANIZATION/LOCATION, plus reliable EMAIL/IBAN) but is
+  weak/wrong on the German register/tax ids the domain needs — it mis-tags "HRB"
+  as LOCATION and a Steuernummer as PHONE, misses USt-IdNr., and its URL
+  recognizer reaches out to the Public Suffix List (blocked offline). So the
+  adapter maps only PERSON/ORG/LOCATION/EMAIL/IBAN and restricts the analysed
+  entity set (no network, no mis-tag), while the German-tuned `RegexDetector`
+  keeps owning HRB/USt-IdNr./Steuernummer/PLZ/phone and our `Anonymizer` keeps
+  the consistent numbered pseudonyms Presidio's anonymizer lacks. It reuses the
+  same precision guards (stopwords, `_lacks_uppercase`, structural noise, score). The anonymiser targets *all* document types, not only
   statements. Validated on the Jahrbuch front matter: with the privacy-filter
   on, the pipeline reaches 8/8 PII (adds the 2 personal names the regex cannot
   find). The model is context-sensitive — it misses names when fed a whole page

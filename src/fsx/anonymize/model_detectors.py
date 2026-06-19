@@ -428,3 +428,145 @@ class PrivacyFilterDetector:
                 )
             )
         return spans
+
+
+# --------------------------------------------------------------------------- #
+# Microsoft Presidio — analyzer as an optional Detector source
+# --------------------------------------------------------------------------- #
+
+# Presidio entity type -> canonical label. Presidio's NER (PERSON/ORGANIZATION/
+# LOCATION) is its strength; its generic EMAIL/IBAN are reliable too. Its German
+# coverage of register/tax ids is poor (it mis-tags "HRB" as LOCATION and a
+# Steuernummer as PHONE_NUMBER), so by default we do NOT map PHONE/URL/date —
+# the German-tuned RegexDetector owns those.
+DEFAULT_PRESIDIO_LABEL_MAP: dict[str, Label] = {
+    "PERSON": Label.PERSON,
+    "ORGANIZATION": Label.COMPANY,
+    "LOCATION": Label.LOCATION,
+    "NRP": Label.PERSON,  # nationality/religious/political group, person-ish
+    "EMAIL_ADDRESS": Label.EMAIL,
+    "IBAN_CODE": Label.IBAN,
+}
+
+# Entities to ask the analyzer for. Restricting the set keeps the noisy/wrong
+# German recognizers from running at all (and the URL recognizer's network fetch
+# of the Public Suffix List — a no-go for an offline pipeline).
+DEFAULT_PRESIDIO_ENTITIES: tuple[str, ...] = (
+    "PERSON", "ORGANIZATION", "LOCATION", "NRP", "EMAIL_ADDRESS", "IBAN_CODE",
+)
+
+
+class PresidioDetector:
+    """Emit :class:`PiiSpan`s from a Microsoft Presidio analyzer (optional).
+
+    Like the other model detectors, the analysing callable is **injected**: the
+    constructor takes ``analyze(text) -> list[result]`` where each result has
+    ``entity_type``, ``start``, ``end`` and ``score`` — so the mapping/guards are
+    unit-testable with a tiny fake. :meth:`load` builds the real callable from a
+    Presidio ``AnalyzerEngine`` over a spaCy model (lazy import; heavy/optional).
+
+    Best used for Presidio's strength — PERSON / ORGANIZATION / LOCATION (and the
+    reliable EMAIL / IBAN) — while the German register/tax/phone ids stay with the
+    precise :class:`~fsx.anonymize.detectors.RegexDetector`. Least-trusted on
+    overlap (:data:`PRIORITY_MODEL`), and it reuses the same precision guards as
+    the spaCy/privacy detectors (structural noise, stopwords, lowercase, score).
+    """
+
+    is_model = True
+
+    def __init__(
+        self,
+        analyze: Callable[[str], Any],
+        *,
+        label_map: dict[str, Label] | None = None,
+        enabled_labels: Iterable[Label] | None = None,
+        min_score: float = 0.5,
+        stopwords: Iterable[str] | None = None,
+        source: str = "presidio",
+    ) -> None:
+        self._analyze = analyze
+        self.label_map = dict(label_map) if label_map is not None else dict(DEFAULT_PRESIDIO_LABEL_MAP)
+        self.enabled_labels = set(enabled_labels) if enabled_labels is not None else None
+        self.min_score = min_score
+        self.stopwords = {re.sub(r"\s+", " ", w).strip().casefold() for w in (stopwords or ())}
+        self.source = source
+
+    @classmethod
+    def load(
+        cls,
+        *,
+        language: str = "de",
+        model: str = "de_core_news_lg",
+        entities: Iterable[str] | None = None,
+        label_map: dict[str, Label] | None = None,
+        enabled_labels: Iterable[Label] | None = None,
+        min_score: float = 0.5,
+        stopwords: Iterable[str] | None = None,
+        source: str = "presidio",
+    ) -> "PresidioDetector":
+        """Build a Presidio ``AnalyzerEngine`` over a spaCy model and wrap it.
+
+        Only the requested ``entities`` are analysed (defaults to the NER + email
+        + IBAN set), which also stops the URL recognizer from reaching out to the
+        Public Suffix List — inference stays local.
+        """
+        try:
+            from presidio_analyzer import AnalyzerEngine
+            from presidio_analyzer.nlp_engine import NlpEngineProvider
+        except Exception as exc:  # pragma: no cover - exercised only without dep
+            raise RuntimeError(
+                "presidio is not installed; `pip install presidio-analyzer` and a "
+                "spaCy model (e.g. `python -m spacy download de_core_news_lg`)."
+            ) from exc
+        nlp_engine = NlpEngineProvider(
+            nlp_configuration={
+                "nlp_engine_name": "spacy",
+                "models": [{"lang_code": language, "model_name": model}],
+            }
+        ).create_engine()
+        engine = AnalyzerEngine(nlp_engine=nlp_engine, supported_languages=[language])
+        wanted = list(entities) if entities is not None else list(DEFAULT_PRESIDIO_ENTITIES)
+
+        def analyze(text: str) -> Any:
+            return engine.analyze(text=text, language=language, entities=wanted)
+
+        return cls(
+            analyze,
+            label_map=label_map,
+            enabled_labels=enabled_labels,
+            min_score=min_score,
+            stopwords=stopwords,
+            source=source,
+        )
+
+    def detect(self, text: str) -> list[PiiSpan]:
+        if not text:
+            return []
+        spans: list[PiiSpan] = []
+        for r in self._analyze(text):
+            label = self.label_map.get(r.entity_type)
+            if label is None:
+                continue
+            if self.enabled_labels is not None and label not in self.enabled_labels:
+                continue
+            if getattr(r, "score", 1.0) < self.min_score:
+                continue
+            surface = text[r.start:r.end].strip()
+            if len(surface) < 2 or _is_structural_noise(surface):
+                continue
+            if label in _PROPER_NOUN_LABELS and _lacks_uppercase(surface):
+                continue
+            if _stopword_match(surface, self.stopwords):
+                continue
+            spans.append(
+                PiiSpan(
+                    start=r.start,
+                    end=r.end,
+                    label=label,
+                    text=text[r.start:r.end],
+                    source=self.source,
+                    entity_id=_group_id(label, surface),
+                    priority=PRIORITY_MODEL,
+                )
+            )
+        return spans

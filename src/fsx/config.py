@@ -45,12 +45,13 @@ import yaml
 from .anonymize.detectors import REGEX_RULES, DictionaryDetector, DictionaryEntity, RegexDetector
 from .anonymize.engine import Anonymizer
 from .anonymize.labels import Label
-from .anonymize.model_detectors import PrivacyFilterDetector, SpacyNerDetector
+from .anonymize.model_detectors import PrivacyFilterDetector, PresidioDetector, SpacyNerDetector
 
 # Signature of a model-detector loader; injectable so config wiring is testable
 # without the multi-hundred-MB models. Default to the respective ``.load``.
 SpacyLoader = Callable[..., Any]
 PrivacyLoader = Callable[..., Any]
+PresidioLoader = Callable[..., Any]
 
 # Dictionary category -> (canonical label, grouped?).
 # "grouped" means all entries are aliases of ONE entity (share a token);
@@ -179,6 +180,7 @@ def _build_model_detectors(
     *,
     spacy_loader: SpacyLoader | None = None,
     privacy_loader: PrivacyLoader | None = None,
+    presidio_loader: PresidioLoader | None = None,
 ) -> list[Any]:
     """Build opt-in statistical NER detectors from the ``models`` config section.
 
@@ -213,6 +215,20 @@ def _build_model_detectors(
             kwargs["repo"] = pf_cfg["repo"]
         detectors.append(loader(**kwargs))
 
+    pres_cfg = models.get("presidio") or {}
+    if pres_cfg.get("enabled", False):
+        loader = presidio_loader if presidio_loader is not None else PresidioDetector.load
+        kwargs = {
+            "language": pres_cfg.get("language", "de"),
+            "model": pres_cfg.get("model", "de_core_news_lg"),
+            "enabled_labels": _parse_labels(pres_cfg.get("labels")),
+            "min_score": float(pres_cfg.get("min_score", 0.5)),
+            "stopwords": _ner_stopwords(pres_cfg),
+        }
+        if pres_cfg.get("entities"):
+            kwargs["entities"] = pres_cfg["entities"]
+        detectors.append(loader(**kwargs))
+
     return detectors
 
 
@@ -221,6 +237,7 @@ def build_anonymizer(
     *,
     spacy_loader: SpacyLoader | None = None,
     privacy_loader: PrivacyLoader | None = None,
+    presidio_loader: PresidioLoader | None = None,
 ) -> Anonymizer:
     """Construct an :class:`Anonymizer` from a parsed config dict.
 
@@ -235,6 +252,7 @@ def build_anonymizer(
     ]
     detectors.extend(_build_model_detectors(
         config, spacy_loader=spacy_loader, privacy_loader=privacy_loader,
+        presidio_loader=presidio_loader,
     ))
     return Anonymizer(detectors, token_overrides=_build_token_overrides(config))
 
@@ -244,8 +262,10 @@ def load_anonymizer(
     *,
     spacy_loader: SpacyLoader | None = None,
     privacy_loader: PrivacyLoader | None = None,
+    presidio_loader: PresidioLoader | None = None,
 ) -> Anonymizer:
     """Convenience: load a YAML config from ``path`` and build the engine."""
     return build_anonymizer(
         load_config(path), spacy_loader=spacy_loader, privacy_loader=privacy_loader,
+        presidio_loader=presidio_loader,
     )
