@@ -323,5 +323,44 @@ Known/deferred (be honest about these):
   Pydantic contracts and the stable `fact_id`.
 - A `fsx.store` reference adapter is intentionally **not** built (host owns it).
 
+## Future work — anonymisation middleware (LLM proxy)
+
+Idea: expose the pipeline as a **PII-redacting middle-layer between a UI client
+and an LLM** — anonymise the user's chat input *and/or* the parsed
+documents/files/context on the way *to* the model, then re-insert the originals
+on the way *back* — toggled by the host. We would build only the embeddable
+primitives, **not** the UI/transport (SSE/HTTP/auth/session store stay the
+host's job, like SQL persistence today).
+
+Most of it already exists: `Anonymizer.anonymize(text)` is the outbound step,
+its `mapping` (token→original) + `surface_tokens` are the reverse table, tokens
+are **consistent across calls** (one `Anonymizer` instance = one conversation,
+so `[PERSON_1]` is stable across turns *and* between chat and documents), the
+document path is `parse_pdf`/`facts_from_pdf`, and `use_models` already gives a
+fast (regex+dict, interactive) vs precise (model, slower) toggle. The map is
+already local-only by design (never leaves with the anonymised text).
+
+Missing pieces, all thin and domain-free (≈1 day + tests):
+- **De-anonymisation** — replace tokens in the LLM reply via the session map
+  (~10–20 lines).
+- **`AnonymizationSession`** wrapper (proposed `fsx/proxy.py`): `redact(text,
+  use_models=…)`, `restore(text)`, `restore_stream(chunks)`, plus `state` /
+  `from_state` so a stateless backend can persist+rehydrate the per-conversation
+  map (host owns storage — same invariant as facts).
+- **Streaming restore** — buffer partial tokens that split across stream chunks.
+
+Honest risks to design around (the hard part is *expectations*, not code):
+1. Restore is fragile to LLM reformatting (`[PERSON 1]` vs `[PERSON_1]`,
+   paraphrase) — use a distinct token form + tolerant restore; residual risk
+   remains.
+2. Recall on free-form chat < on documents (short, low-context input; the
+   context-sensitive model detectors weaken). It is PII **reduction, not a
+   guarantee** — the toggle must not be sold as "safe".
+3. The token→original map must never enter the LLM payload or logs.
+4. Structured payloads (JSON / tool-call args) need format-preserving handling —
+   out of scope for a v1 that treats input as text.
+Boundary stays clean: new code is domain-free, behind small transport-agnostic
+APIs; no UI, no new heavy deps.
+
 When in doubt, measure on the real `.scratch/` PDFs (if present), keep the
 reusable boundary clean, and prefer precision.
