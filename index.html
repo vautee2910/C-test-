@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Blueprint für eine belastbare Enterprise Knowledge Platform mit Hybrid Retrieval, Reranking und zitierbaren Antworten.">
+  <title>Knowledge Systems — Enterprise Retrieval Blueprint</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Knowledge Systems Startseite">
+      <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span>KNOWLEDGE<span>SYSTEMS</span></span>
+    </a>
+    <nav aria-label="Hauptnavigation">
+      <a href="#architektur">Architektur</a>
+      <a href="#prinzipien">Prinzipien</a>
+      <a href="#stack">Stack</a>
+      <a href="#roadmap">Roadmap</a>
+    </nav>
+    <a class="button button-small" href="#blueprint">Blueprint ansehen <span>↗</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero" id="blueprint">
+      <div class="hero-grid"></div>
+      <div class="eyebrow"><span></span> ENTERPRISE KNOWLEDGE PROCESSING</div>
+      <h1>RAG ist nicht die<br><em>Architektur.</em></h1>
+      <p class="hero-copy">Für 100.000 heterogene Dokumente braucht es mehr als Chunks und Embeddings. Es braucht ein belastbares Search- und Knowledge-Processing-System.</p>
+      <div class="hero-actions">
+        <a class="button" href="#architektur">Architektur entdecken <span>↓</span></a>
+        <a class="text-link" href="#prinzipien">Designprinzipien <span>→</span></a>
+      </div>
+      <div class="hero-stats" aria-label="Kennzahlen">
+        <div><strong>100K+</strong><span>Dokumente</span></div>
+        <div><strong>4–8M</strong><span>Search Chunks</span></div>
+        <div><strong>ZERO</strong><span>ACL Leaks</span></div>
+      </div>
+    </section>
+
+    <section class="manifesto section-pad">
+      <p class="section-number">01 / GRUNDSATZ</p>
+      <div class="manifesto-copy">
+        <h2>Die robuste Baseline<br>ist eine <em>Pipeline.</em></h2>
+        <p>Strukturtreue Ingestion, ein kanonisches Dokumentmodell und hybride Indizes bilden das Fundament. RAG ist nur die letzte Schicht — nach Retrieval, Fusion und Reranking.</p>
+      </div>
+      <div class="formula" aria-label="Architekturformel">
+        <span>INGEST</span><b>→</b><span>MODEL</span><b>→</b><span>RETRIEVE</span><b>→</b><span>RERANK</span><b>→</b><span>CITE</span>
+      </div>
+    </section>
+
+    <section class="architecture section-pad" id="architektur">
+      <div class="section-heading">
+        <div><p class="section-number">02 / ZIELARCHITEKTUR</p><h2>Vom Rohdokument<br>zur <em>Evidenz.</em></h2></div>
+        <p>Ein durchgängiger, versionierter Datenfluss. Jede Aussage bleibt bis zur Quelle nachvollziehbar.</p>
+      </div>
+      <div class="pipeline" aria-label="Architektur-Pipeline">
+        <article class="pipeline-card accent"><span class="step">01</span><div class="icon">⌁</div><h3>Sources</h3><p>Filesystem · SharePoint<br>Databases · APIs</p><small>DISCOVER + DELTA</small></article>
+        <div class="connector"><i></i><span>→</span></div>
+        <article class="pipeline-card"><span class="step">02</span><div class="icon">⇄</div><h3>Ingestion</h3><p>Connectors · Temporal<br>Checksums · ACLs</p><small>STATEFUL WORKFLOW</small></article>
+        <div class="connector"><i></i><span>→</span></div>
+        <article class="pipeline-card"><span class="step">03</span><div class="icon">▤</div><h3>Canonical</h3><p>Documents · Sections<br>Elements · Lineage</p><small>VERSIONED MODEL</small></article>
+        <div class="connector"><i></i><span>→</span></div>
+        <article class="pipeline-card"><span class="step">04</span><div class="icon">⌕</div><h3>Search</h3><p>BM25 · Dense · Sparse<br>Metadata · Hierarchy</p><small>HYBRID INDEX</small></article>
+        <div class="connector"><i></i><span>→</span></div>
+        <article class="pipeline-card dark"><span class="step">05</span><div class="icon">✦</div><h3>Evidence</h3><p>Fusion · Reranking<br>Context · Citations</p><small>AUTHORIZED ANSWER</small></article>
+      </div>
+      <div class="tech-strip"><span>OBJECT STORE</span><b>MINIO / S3</b><span>METADATA</span><b>POSTGRESQL</b><span>ORCHESTRATION</span><b>TEMPORAL</b><span>SEARCH</span><b>OPENSEARCH</b></div>
+    </section>
+
+    <section class="principles section-pad" id="prinzipien">
+      <div class="section-heading inverse">
+        <div><p class="section-number">03 / DESIGNPRINZIPIEN</p><h2>Gebaut für die<br><em>Realität.</em></h2></div>
+        <p>Heterogene Quellen, wechselnde Modelle und strikte Berechtigungen sind keine Sonderfälle — sie sind das System.</p>
+      </div>
+      <div class="principle-grid">
+        <article><span>01</span><div class="line-icon">⌗</div><h3>Structure first</h3><p>Überschriften, Tabellen, Lesereihenfolge und Bounding Boxes bleiben erhalten. Kein blindes 500-Token-Chunking.</p><a href="#architecture-detail">Mehr erfahren →</a></article>
+        <article><span>02</span><div class="line-icon">◎</div><h3>Hybrid by default</h3><p>BM25 findet exakte IDs. Dense Retrieval versteht Semantik. Rank Fusion bringt beides verlässlich zusammen.</p><a href="#architecture-detail">Mehr erfahren →</a></article>
+        <article><span>03</span><div class="line-icon">◇</div><h3>Evidence, not text</h3><p>Small-to-big Retrieval lädt präzise Passagen und erweitert sie mit dem richtigen Abschnittskontext.</p><a href="#architecture-detail">Mehr erfahren →</a></article>
+        <article><span>04</span><div class="line-icon">⬡</div><h3>Secure at retrieval</h3><p>ACL-Filter greifen vor der Kandidatenauswahl. Nur autorisierte Evidenz erreicht Reranker und LLM.</p><a href="#architecture-detail">Mehr erfahren →</a></article>
+      </div>
+    </section>
+
+    <section class="retrieval section-pad" id="architecture-detail">
+      <div class="section-heading">
+        <div><p class="section-number">04 / RETRIEVAL</p><h2>Recall zuerst.<br><em>Präzision danach.</em></h2></div>
+        <p>Mehrere spezialisierte Retriever liefern Kandidaten. Der Cross-Encoder entscheidet, welche Evidenz wirklich trägt.</p>
+      </div>
+      <div class="retrieval-board">
+        <div class="retrievers">
+          <article><span>A</span><div><h3>BM25</h3><p>Exact terms & identifiers</p></div><b>LEXICAL</b></article>
+          <article><span>B</span><div><h3>Dense vectors</h3><p>Semantic similarity</p></div><b>SEMANTIC</b></article>
+          <article><span>C</span><div><h3>Sparse neural</h3><p>Learned term expansion</p></div><b>OPTIONAL</b></article>
+          <article><span>D</span><div><h3>Metadata</h3><p>Title, entity & filters</p></div><b>STRUCTURED</b></article>
+        </div>
+        <div class="rank-flow">
+          <div><small>50–200 EACH</small><strong>Candidate Pool</strong></div><span>↓</span>
+          <div class="highlight"><small>RECIPROCAL RANK</small><strong>RRF Fusion</strong></div><span>↓</span>
+          <div><small>30–100 ITEMS</small><strong>Cross-Encoder</strong></div><span>↓</span>
+          <div class="result"><small>5–15 BLOCKS</small><strong>Cited Evidence</strong></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="stack section-pad" id="stack">
+      <p class="section-number">05 / REFERENCE STACK</p>
+      <h2>Pragmatisch.<br><em>On-prem ready.</em></h2>
+      <div class="stack-grid">
+        <article><small>WORKFLOW</small><strong>Temporal</strong><p>Durable, idempotent document processing</p></article>
+        <article><small>DOCUMENT AI</small><strong>Docling <i>+</i> Tika</strong><p>Structure-aware parsing with broad fallback</p></article>
+        <article class="featured"><small>SEARCH PLATFORM</small><strong>OpenSearch</strong><p>BM25, vectors, hybrid queries, RRF and filters in one system</p><span>PRIMARY CHOICE</span></article>
+        <article><small>STORAGE</small><strong>MinIO <i>+</i> Postgres</strong><p>Immutable artifacts and operational state</p></article>
+        <article><small>MODEL SERVING</small><strong>vLLM <i>+</i> TEI</strong><p>Local generation, embeddings and reranking</p></article>
+      </div>
+    </section>
+
+    <section class="roadmap section-pad" id="roadmap">
+      <div class="section-heading inverse"><div><p class="section-number">06 / UMSETZUNG</p><h2>In drei Stufen<br>zum <em>System.</em></h2></div><p>Erst eine messbare Search-Baseline. Dann Enterprise-Betrieb. Agentische Komplexität kommt zuletzt.</p></div>
+      <div class="roadmap-grid">
+        <article><span>STUFE 01</span><h3>Belastbare<br>Baseline</h3><ul><li>Canonical model</li><li>Hybrid retrieval</li><li>Cross-encoder</li><li>Citations & ACLs</li><li>Evaluation dataset</li></ul><b>START HERE</b></article>
+        <article><span>STUFE 02</span><h3>Enterprise<br>Betrieb</h3><ul><li>Temporal workflows</li><li>SharePoint delta sync</li><li>OCR & table cascade</li><li>Blue/green reindex</li><li>Observability</li></ul></article>
+        <article><span>STUFE 03</span><h3>Deep<br>Research</h3><ul><li>Query classification</li><li>Multi-query retrieval</li><li>Evidence notebook</li><li>Full-document fallback</li><li>Structured data tools</li></ul></article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><span>KNOWLEDGE<span>SYSTEMS</span></span></div>
+    <p>Build search first. Add intelligence deliberately.</p>
+    <a href="#top">Nach oben ↑</a>
+  </footer>
+  <script src="script.js"></script>
+</body>
+</html>
